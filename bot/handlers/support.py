@@ -25,10 +25,10 @@ class SupportHandlers:
         user_id = callback_query.from_user.id
         active_support_chats[user_id] = self.admin_id
         await callback_query.message.edit_text(
-            "You are now connected to support. Please type your message.\n"
-            "The admin will reply to you here as soon as possible.",
+            "Вы вошли в чат с техподдержкой. Напишите ваше сообщение.\n"
+            "Администратор ответит вам здесь, как только сможет.",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("❌ Close Chat", callback_data="close_support")
+                InlineKeyboardButton("❌ Закрыть чат", callback_data="close_support")
             ]])
         )
         await callback_query.answer()
@@ -38,39 +38,36 @@ class SupportHandlers:
         if user_id in active_support_chats:
             del active_support_chats[user_id]
         await callback_query.message.edit_text(
-            "Support chat closed. You are now back to the main menu.",
+            "Чат с техподдержкой закрыт. Вы вернулись в главное меню.",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("⬅️ Back to Main Menu", callback_data="main_menu")
+                InlineKeyboardButton("⬅️ Назад в главное меню", callback_data="main_menu")
             ]])
         )
-        await callback_query.answer("Chat closed.")
+        await callback_query.answer("Чат закрыт.")
 
     async def user_to_admin_handler(self, client: Client, message: Message):
         user_id = message.from_user.id
         if user_id in active_support_chats:
             admin_id = active_support_chats[user_id]
             try:
-                # Forward the message to the admin
                 forwarded_message = await message.forward(admin_id)
-                # You can also send extra info
                 await client.send_message(
                     admin_id,
-                    f"👆 New support message from User ID: `{user_id}`. Reply to this message to respond.",
+                    f"👆 Новое сообщение в техподдержку от пользователя ID: `{user_id}`. Ответьте на это сообщение, чтобы отправить ответ.",
                     reply_to_message_id=forwarded_message.id
                 )
-                await message.reply_text("Your message has been sent to the support team.")
+                await message.reply_text("Ваше сообщение было отправлено в техподдержку.")
             except Exception as e:
-                logging.error(f"Failed to forward support message from {user_id} to {admin_id}: {e}")
-                await message.reply_text("Sorry, couldn't send your message. Please try again later.")
+                logging.error(f"Не удалось переслать сообщение от {user_id} к {admin_id}: {e}")
+                await message.reply_text("Извините, не удалось отправить ваше сообщение. Пожалуйста, попробуйте позже.")
 
     async def admin_to_user_handler(self, client: Client, message: Message):
-        # Check if the admin is replying to a message forwarded by the bot
         if message.reply_to_message and message.reply_to_message.forward_from:
             user_id = message.reply_to_message.forward_from.id
             if user_id in active_support_chats:
                 try:
-                    await client.send_message(user_id, f"**Support Reply:**\n{message.text}")
+                    await client.send_message(user_id, f"**Ответ от техподдержки:**\n{message.text}")
                     await message.react("✅")
                 except Exception as e:
-                    logging.error(f"Failed to send admin reply to {user_id}: {e}")
-                    await message.reply_text(f"Could not send message to user {user_id}. They may have blocked the bot.")
+                    logging.error(f"Не удалось отправить ответ администратора пользователю {user_id}: {e}")
+                    await message.reply_text(f"Не удалось отправить сообщение пользователю {user_id}. Возможно, он заблокировал бота.")

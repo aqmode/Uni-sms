@@ -1,10 +1,23 @@
 import os
 
-API_ID = os.environ.get("API_ID", "25534167")
-API_HASH = os.environ.get("API_HASH", "a03ad3366f412b5e881b5f9ffd551f75")
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "8133768979:AAFPtTyzcLacDFYcej7N_y9mO9qqu6DsQrU")
-ONLINE_SIM_API_KEY = os.environ.get("ONLINE_SIM_API_KEY", "93GKxXEXX2pw4fk-qqH3A26D-xSux7Y5D-mAg739n8-u1N7k1xe2LA25uw")
+# This file manages the bot's configuration.
+# It prioritizes settings from a user-friendly `settings.py` file.
+# If `settings.py` is not found, it falls back to environment variables.
 
-# For the support feature
-ADMIN_ID = os.environ.get("ADMIN_ID") # Add your telegram user ID here
-assert ADMIN_ID, "Please set the ADMIN_ID environment variable"
+try:
+    # User-friendly configuration from a file
+    from settings import API_ID, API_HASH, BOT_TOKEN, ONLINE_SIM_API_KEY, ADMIN_ID
+
+    # Simple validation to check if the user has filled out the settings
+    if BOT_TOKEN == "YOUR_BOT_TOKEN" or ADMIN_ID == 0:
+        # Set to None to be caught by the startup check in main.py
+        BOT_TOKEN = None
+        ADMIN_ID = None
+
+except ImportError:
+    # Fallback for server deployment using environment variables
+    API_ID = os.environ.get("API_ID")
+    API_HASH = os.environ.get("API_HASH")
+    BOT_TOKEN = os.environ.get("BOT_TOKEN")
+    ONLINE_SIM_API_KEY = os.environ.get("ONLINE_SIM_API_KEY")
+    ADMIN_ID = os.environ.get("ADMIN_ID")

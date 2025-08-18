@@ -31,14 +31,18 @@ class StartHandlers:
 
         self.db.add_user(user.id, user.username, user.first_name, referred_by)
 
-        welcome_text = f"Welcome to Uni SMS, {user.first_name}!\n\nYour one-stop bot for virtual numbers."
+        welcome_text = (
+            f"Добро пожаловать в Uni SMS, {user.first_name}!\n\n"
+            "Ваш универсальный бот для работы с виртуальными номерами. "
+            "Используйте меню для навигации."
+        )
         await message.reply_text(welcome_text, reply_markup=main_menu_keyboard())
 
     async def main_menu_callback_handler(self, client: Client, callback_query: CallbackQuery):
         """Handles the 'Back to Main Menu' button."""
         await callback_query.answer()
         await callback_query.message.edit_text(
-            "Main Menu:",
+            "Главное меню:",
             reply_markup=main_menu_keyboard()
         )
 
@@ -46,6 +50,6 @@ class StartHandlers:
         """Handles the 'My Account' button."""
         await callback_query.answer()
         await callback_query.message.edit_text(
-            "Account Menu:",
+            "Личный кабинет:",
             reply_markup=account_menu_keyboard()
         )

@@ -18,8 +18,8 @@ class AdminHandlers:
 
     async def check_balance_handler(self, client: Client, message: Message):
         """
-        Checks the balance of a specific user.
-        Usage: /user_balance <user_telegram_id>
+        Проверяет баланс указанного пользователя.
+        Использование: /user_balance <user_telegram_id>
         """
         try:
             _, user_id_str = message.text.split()
@@ -28,19 +28,19 @@ class AdminHandlers:
             balance_kopecks = self.db.get_user_balance(user_id)
             balance_rub = balance_kopecks / 100.0
 
-            await message.reply_text(f"Balance for user `{user_id}` is: **{balance_rub:.2f} RUB**.")
+            await message.reply_text(f"Баланс пользователя `{user_id}`: **{balance_rub:.2f} RUB**.")
 
         except ValueError:
-            await message.reply_text("Invalid format. Use: `/user_balance <user_id>`")
+            await message.reply_text("Неверный формат. Используйте: `/user_balance <user_id>`")
         except Exception as e:
-            logging.error(f"Error in /user_balance command: {e}")
-            await message.reply_text(f"An error occurred: {e}")
+            logging.error(f"Ошибка в команде /user_balance: {e}")
+            await message.reply_text(f"Произошла ошибка: {e}")
 
     async def credit_handler(self, client: Client, message: Message):
         """
-        Manually credits a user's account.
-        Usage: /credit <user_telegram_id> <amount_in_rub>
-        Example: /credit 123456789 500.50
+        Пополняет счет пользователя вручную.
+        Использование: /credit <user_telegram_id> <сумма_в_рублях>
+        Пример: /credit 123456789 500.50
         """
         try:
             _, user_id_str, amount_str = message.text.split()
@@ -49,31 +49,30 @@ class AdminHandlers:
             amount_kopecks = int(amount_rub * 100)
 
             if amount_kopecks <= 0:
-                await message.reply_text("Amount must be positive.")
+                await message.reply_text("Сумма должна быть положительной.")
                 return
 
             success = self.db.create_transaction(
                 user_telegram_id=user_id,
                 amount=amount_kopecks,
                 type='deposit',
-                details=f"Manual credit by admin {self.admin_id}"
+                details=f"Ручное пополнение администратором {self.admin_id}"
             )
 
             if success:
-                await message.reply_text(f"Successfully credited {amount_rub:.2f} RUB to user {user_id}.")
-                # Notify the user
+                await message.reply_text(f"Баланс пользователя {user_id} успешно пополнен на {amount_rub:.2f} RUB.")
                 try:
                     await client.send_message(
                         user_id,
-                        f"Your balance has been topped up by **{amount_rub:.2f} RUB**."
+                        f"Ваш баланс был пополнен на **{amount_rub:.2f} RUB**."
                     )
                 except Exception as e:
-                    await message.reply_text(f"Could not notify user {user_id} (they may have blocked the bot). Error: {e}")
+                    await message.reply_text(f"Не удалось уведомить пользователя {user_id} (возможно, он заблокировал бота). Ошибка: {e}")
             else:
-                await message.reply_text(f"Failed to credit user {user_id}. Check logs.")
+                await message.reply_text(f"Не удалось пополнить баланс пользователя {user_id}. Проверьте логи.")
 
         except ValueError:
-            await message.reply_text("Invalid command format. Use: `/credit <user_id> <amount>`")
+            await message.reply_text("Неверный формат. Используйте: `/credit <user_id> <сумма>`")
         except Exception as e:
-            logging.error(f"Error in /credit command: {e}")
-            await message.reply_text(f"An error occurred: {e}")
+            logging.error(f"Ошибка в команде /credit: {e}")
+            await message.reply_text(f"Произошла ошибка: {e}")

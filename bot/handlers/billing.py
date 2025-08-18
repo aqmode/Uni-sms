@@ -15,16 +15,14 @@ class BillingHandlers:
     async def top_up_balance_handler(self, client: Client, callback_query: CallbackQuery):
         await callback_query.answer()
 
-        # In a real bot, this would generate a payment link.
-        # Here, we just provide instructions for the placeholder system.
         text = (
-            "**Balance Top-up**\n\n"
-            "To top up your balance, please contact support. This is a manual process for now.\n\n"
-            "In a real-world scenario, this would link to a payment provider."
+            "**Пополнение баланса**\n\n"
+            "Для пополнения баланса, пожалуйста, свяжитесь с администратором через техподдержку.\n\n"
+            "В будущем здесь будет интеграция с платежной системой."
         )
 
         keyboard = InlineKeyboardMarkup([[
-            InlineKeyboardButton("⬅️ Back to Account Menu", callback_data="account_menu")
+            InlineKeyboardButton("⬅️ Назад в личный кабинет", callback_data="account_menu")
         ]])
 
         await callback_query.message.edit_text(text, reply_markup=keyboard)

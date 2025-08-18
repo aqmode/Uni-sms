@@ -55,5 +55,15 @@ class UniSMSBot(Client):
 
 
 if __name__ == "__main__":
+    # Startup Check
+    if not BOT_TOKEN or not ADMIN_ID or not API_ID or not API_HASH or not ONLINE_SIM_API_KEY:
+        import sys
+        print("!!! ОШИБКА: НЕОБХОДИМА НАСТРОЙКА !!!")
+        print("Пожалуйста, выполните следующие шаги:")
+        print("1. Скопируйте файл `settings.py.example` и переименуйте его в `settings.py`.")
+        print("2. Откройте `settings.py` и впишите ваши данные (API_ID, API_HASH, BOT_TOKEN и т.д.).")
+        print("3. Сохраните файл и запустите бота снова.")
+        sys.exit("Бот не может быть запущен без полной конфигурации.")
+
     bot = UniSMSBot()
     bot.run()

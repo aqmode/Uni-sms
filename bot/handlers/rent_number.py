@@ -18,8 +18,9 @@ class RentNumberHandlers:
         return [
             CallbackQueryHandler(self.show_rent_countries, filters.regex("^rent_menu$")),
             CallbackQueryHandler(self.show_rent_countries_paginated, filters.regex(r"^rent_country_page:(\d+)$")),
-            CallbackQueryHandler(self.process_rent_request, filters.regex(r"^rent_country:(\d+)$")),
-            CallbackQueryHandler(self.confirm_rental, filters.regex(r"^rent_confirm:(\d+):(.+):(\d+)$")),
+            CallbackQueryHandler(self.show_rent_services, filters.regex(r"^rent_country:(\d+)$")),
+            # Pagination for services can be added here if needed
+            CallbackQueryHandler(self.confirm_rental, filters.regex(r"^rent_service:(\d+):(.+)$")),
             CallbackQueryHandler(self.manage_rental, filters.regex(r"^manage_rent:(\d+)$")),
             CallbackQueryHandler(self.extend_rental, filters.regex(r"^extend_rent:(\d+)$")),
             CallbackQueryHandler(self.view_rental_sms, filters.regex(r"^view_rent_sms:(\d+)$")),
@@ -52,31 +53,72 @@ class RentNumberHandlers:
         page = int(callback_query.matches[0].group(1))
         await self.show_rent_countries(client, callback_query, page=page)
 
-    async def process_rent_request(self, client: Client, callback_query: CallbackQuery):
+    async def show_rent_services(self, client: Client, callback_query: CallbackQuery):
+        """After a country is selected, show available services for rent."""
         country_id = int(callback_query.matches[0].group(1))
-        # For simplicity, I'll assume 'telegram' service and a 7-day rental.
-        # A full implementation would ask for service and duration.
-        service = "telegram"
-        days = 7
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"Confirm Rent ({days} days)", callback_data=f"rent_confirm:{country_id}:{service}:{days}")],
-            [InlineKeyboardButton("⬅️ Back to Countries", callback_data="rent_menu")]
-        ])
-        await callback_query.message.edit_text(f"You are about to rent a number for **{service}** in the selected country for **{days} days**.", reply_markup=keyboard)
+        await callback_query.answer("Загрузка сервисов...")
+        try:
+            tariffs = await self._get_rent_tariffs()
+            country_info = next((c for c in tariffs.get("list", []) if c['id'] == country_id), None)
+
+            if not country_info or not country_info.get("services"):
+                await callback_query.message.edit_text("Для этой страны нет доступных сервисов для аренды.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад к странам", callback_data="rent_menu")]]))
+                return
+
+            buttons = []
+            for service, details in country_info["services"].items():
+                # Assuming the price is for a month, let's just use this for now.
+                # The API is not super clear on duration pricing.
+                price = details['price']
+                buttons.append((f"{service.capitalize()} - {price} RUB/мес.", f"rent_service:{country_id}:{service}"))
+
+            keyboard = create_paginated_keyboard(buttons, 0, 15, f"rent_service_page:{country_id}")
+            keyboard.inline_keyboard.append([InlineKeyboardButton("⬅️ Назад к странам", callback_data="rent_menu")])
+            await callback_query.message.edit_text("Выберите сервис для аренды:", reply_markup=keyboard)
+        except Exception as e:
+            logging.error(f"Error showing rent services: {e}")
+            await callback_query.message.edit_text("Произошла ошибка при загрузке сервисов.")
+
 
     async def confirm_rental(self, client: Client, callback_query: CallbackQuery):
         country_id = int(callback_query.matches[0].group(1))
         service = callback_query.matches[0].group(2)
-        days = int(callback_query.matches[0].group(3))
         user_id = callback_query.from_user.id
 
-        await callback_query.message.edit_text("⏳ Processing rental...")
+        # Simplified duration - let's assume 30 days as per the price.
+        days = 30
 
-        # Simplified cost determination. A real implementation would need to parse this from tariffs.
-        # Let's assume a 7-day rental for telegram costs 150 RUB.
-        cost = 150 * 100 # 15000 kopecks
+        await callback_query.message.edit_text("⏳ Обработка аренды...")
+
+        # Get the cost from the cached tariffs
+        try:
+            tariffs = await self._get_rent_tariffs()
+            country_info = next((c for c in tariffs.get("list", []) if c['id'] == country_id), None)
+            cost_rub = float(country_info["services"][service]['price'])
+            cost_kopecks = int(cost_rub * 100)
+        except Exception as e:
+            logging.error(f"Could not get rental price for service {service}: {e}")
+            await callback_query.message.edit_text("Не удалось определить цену. Попробуйте снова.")
+            return
 
         # Charge internal balance
+        transaction_success = self.db.create_transaction(
+            user_telegram_id=user_id,
+            amount=-cost_kopecks,
+            type='rental',
+            details=f"Attempt to rent {service} for {days} days in country {country_id}"
+        )
+
+        if not transaction_success:
+            await callback_query.message.edit_text(
+                "❌ **Аренда не удалась!**\n\nНа вашем внутреннем балансе недостаточно средств. Пожалуйста, пополните счет.",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("👤 Мой кабинет", callback_data="account_menu")
+                ]])
+            )
+            return
+
+        # If charge succeeds, attempt to rent from API
         transaction_success = self.db.create_transaction(
             user_telegram_id=user_id,
             amount=-cost,

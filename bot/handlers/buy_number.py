@@ -44,16 +44,16 @@ class BuyNumberHandlers:
         return tariffs_cache["tariffs"]
 
     async def show_countries(self, client: Client, callback_query: CallbackQuery, page=0):
-        await callback_query.answer("Fetching countries...")
+        await callback_query.answer("Загрузка стран...")
         try:
             await self._get_tariffs()
             buttons = [(f"🇺🇸 {c['name_en']}", f"buy_country:{c['id']}") for c in tariffs_cache["countries"]]
             keyboard = create_paginated_keyboard(buttons, page, 15, "buy_country_page")
-            keyboard.inline_keyboard.append([InlineKeyboardButton("⬅️ Back to Main Menu", callback_data="main_menu")])
-            await callback_query.message.edit_text("Please select a country:", reply_markup=keyboard)
+            keyboard.inline_keyboard.append([InlineKeyboardButton("⬅️ Назад в главное меню", callback_data="main_menu")])
+            await callback_query.message.edit_text("Пожалуйста, выберите страну:", reply_markup=keyboard)
         except Exception as e:
-            logging.error(f"Error showing countries: {e}")
-            await callback_query.message.edit_text("Could not fetch country list. Please try again later.")
+            logging.error(f"Ошибка при отображении стран: {e}")
+            await callback_query.message.edit_text("Не удалось загрузить список стран. Пожалуйста, попробуйте позже.")
 
     async def show_countries_paginated(self, client: Client, callback_query: CallbackQuery):
         page = int(callback_query.matches[0].group(1))
@@ -61,23 +61,23 @@ class BuyNumberHandlers:
 
     async def show_services(self, client: Client, callback_query: CallbackQuery, page=0):
         country_id = int(callback_query.matches[0].group(1))
-        await callback_query.answer("Fetching services...")
+        await callback_query.answer("Загрузка сервисов...")
         try:
             tariffs = await self._get_tariffs()
             country_services = [s for s in tariffs["services"] if s['country'] == country_id and s['count'] > 0]
 
             if not country_services:
-                await callback_query.message.edit_text("No services available for this country.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back to Countries", callback_data="buy_menu")]]))
+                await callback_query.message.edit_text("Для этой страны нет доступных сервисов.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад к странам", callback_data="buy_menu")]]))
                 return
 
             buttons = [(f"{s['service']} - {s['price']} RUB", f"buy_service:{s['id']}:{country_id}") for s in country_services]
             callback_prefix = f"buy_service_page:{country_id}"
             keyboard = create_paginated_keyboard(buttons, page, 15, callback_prefix)
-            keyboard.inline_keyboard.append([InlineKeyboardButton("⬅️ Back to Countries", callback_data="buy_menu")])
-            await callback_query.message.edit_text("Please select a service:", reply_markup=keyboard)
+            keyboard.inline_keyboard.append([InlineKeyboardButton("⬅️ Назад к странам", callback_data="buy_menu")])
+            await callback_query.message.edit_text("Пожалуйста, выберите сервис:", reply_markup=keyboard)
         except Exception as e:
-            logging.error(f"Error showing services: {e}")
-            await callback_query.message.edit_text("Could not fetch service list. Please try again later.")
+            logging.error(f"Ошибка при отображении сервисов: {e}")
+            await callback_query.message.edit_text("Не удалось загрузить список сервисов. Пожалуйста, попробуйте позже.")
 
     async def show_services_paginated(self, client: Client, callback_query: CallbackQuery):
         country_id = int(callback_query.matches[0].group(1))
@@ -91,78 +91,64 @@ class BuyNumberHandlers:
         country_id = int(callback_query.matches[0].group(2))
         user_id = callback_query.from_user.id
 
-        await callback_query.message.edit_text("⏳ Processing purchase...")
+        await callback_query.message.edit_text("⏳ Обработка покупки...")
 
-        # 1. Get the cost of the service
         try:
             tariffs = await self._get_tariffs()
             service_info = next((s for s in tariffs["services"] if s['id'] == service_id_str and s['country'] == country_id), None)
             if not service_info:
-                await callback_query.message.edit_text("Error: Service not found or is no longer available.")
+                await callback_query.message.edit_text("Ошибка: Сервис не найден или больше не доступен.")
                 return
-
-            # Assuming price is in rubles, convert to kopecks/cents
             cost = int(float(service_info['price']) * 100)
         except Exception as e:
-            logging.error(f"Could not determine service cost: {e}")
-            await callback_query.message.edit_text("An error occurred while verifying the price.")
+            logging.error(f"Не удалось определить стоимость сервиса: {e}")
+            await callback_query.message.edit_text("Произошла ошибка при проверке цены.")
             return
 
-        # 2. Attempt to charge the user's internal balance
         transaction_success = self.db.create_transaction(
             user_telegram_id=user_id,
             amount=-cost,
             type='purchase',
-            details=f"Attempt to buy service {service_id_str} for country {country_id}"
+            details=f"Попытка покупки сервиса {service_id_str} для страны {country_id}"
         )
 
         if not transaction_success:
             await callback_query.message.edit_text(
-                "❌ **Purchase Failed!**\n\nYour internal balance is too low. Please top up your account.",
+                "❌ **Покупка не удалась!**\n\nНа вашем внутреннем балансе недостаточно средств. Пожалуйста, пополните счет.",
                 reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("👤 My Account", callback_data="account_menu")
+                    InlineKeyboardButton("👤 Мой кабинет", callback_data="account_menu")
                 ]])
             )
             return
 
-        # 3. If charge is successful, attempt to buy the number from the API
         try:
             purchase_data = await self.api.get_num(service_id_str, country_id)
             if purchase_data.get("response") == "1":
                 tzid = purchase_data["tzid"]
                 phone_number = purchase_data["number"]
-
                 self.db.log_purchase(user_id, tzid, service_id_str, str(country_id), phone_number)
-
                 await callback_query.message.edit_text(
-                    f"✅ **Number Purchased!**\n\n"
-                    f"**Number:** `{phone_number}`\n"
-                    f"**Service:** {service_info['service']}\n\n"
-                    "Waiting for SMS... I will notify you when it arrives."
+                    f"✅ **Номер приобретен!**\n\n"
+                    f"**Номер:** `{phone_number}`\n"
+                    f"**Сервис:** {service_info['service']}\n\n"
+                    "Ожидаю СМС... Я сообщу, когда оно придет."
                 )
                 asyncio.create_task(self.poll_for_sms(callback_query, tzid))
             else:
-                # 4. If API purchase fails, refund the user
                 error = purchase_data.get("error_msg", "Unknown error")
-                logging.error(f"API purchase failed for user {user_id}: {error}. Refunding internal balance.")
-                self.db.create_transaction(
-                    user_telegram_id=user_id,
-                    amount=cost, # Positive amount for refund
-                    type='refund',
-                    details=f"Refund for failed purchase attempt. Reason: {error}"
-                )
+                logging.error(f"Ошибка API при покупке для пользователя {user_id}: {error}. Возвращаю средства.")
+                self.db.create_transaction(user_id, cost, 'refund', f"Возврат из-за ошибки покупки. Причина: {error}")
                 await callback_query.message.edit_text(
-                    f"❌ **Purchase Failed!**\n\nAn issue occurred with the provider: `{error}`\n\nYour account has been refunded.",
-                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back to Services", f"buy_country:{country_id}")]]))
+                    f"❌ **Покупка не удалась!**\n\nПроизошла ошибка на стороне провайдера: `{error}`\n\nВаш баланс был пополнен на сумму покупки.",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад к сервисам", f"buy_country:{country_id}")]]))
         except Exception as e:
-            logging.error(f"Critical error during number purchase for {user_id}: {e}. Refunding.")
-            # Also refund on unexpected exceptions
-            self.db.create_transaction(user_id, cost, 'refund', f"Refund due to unexpected error: {e}")
-            await callback_query.message.edit_text("An unexpected error occurred. Your account has been refunded.")
+            logging.error(f"Критическая ошибка во время покупки номера для {user_id}: {e}. Возвращаю средства.")
+            self.db.create_transaction(user_id, cost, 'refund', f"Возврат из-за непредвиденной ошибки: {e}")
+            await callback_query.message.edit_text("Произошла непредвиденная ошибка. Ваш баланс был пополнен на сумму покупки.")
 
     async def poll_for_sms(self, callback_query: CallbackQuery, tzid: int):
-        max_wait_time = 300  # 5 minutes
-        poll_interval = 5  # seconds
+        max_wait_time = 300
+        poll_interval = 5
         elapsed_time = 0
 
         while elapsed_time < max_wait_time:
@@ -173,14 +159,14 @@ class BuyNumberHandlers:
                 state = await self.api.get_state(tzid)
                 if state.get("response") == "1" and state.get("msg"):
                     sms_code = state["msg"]
-                    await callback_query.message.reply_text(f"✉️ **New SMS Received!**\n\nCode: `{sms_code}`")
+                    await callback_query.message.reply_text(f"✉️ **Получено новое СМС!**\n\nКод: `{sms_code}`")
                     await self.api.set_operation_ok(tzid)
-                    return # Stop polling
+                    return
                 elif state.get("response") == "ERROR_NO_OPERATIONS":
-                     await callback_query.message.reply_text("Operation timed out or was cancelled.")
+                     await callback_query.message.reply_text("Время ожидания операции истекло или она была отменена.")
                      return
             except Exception as e:
-                logging.error(f"Error polling for SMS (tzid: {tzid}): {e}")
+                logging.error(f"Ошибка при проверке СМС (tzid: {tzid}): {e}")
 
-        await callback_query.message.reply_text("Stopped waiting for SMS after 5 minutes.")
-        await self.api.set_operation_ok(tzid) # Close the operation
+        await callback_query.message.reply_text("Ожидание СМС завершено (5 минут).")
+        await self.api.set_operation_ok(tzid)

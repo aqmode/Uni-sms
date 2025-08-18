@@ -29,47 +29,47 @@ class FreeNumbersHandlers:
         return free_numbers_cache
 
     async def show_free_countries(self, client: Client, callback_query: CallbackQuery):
-        await callback_query.answer("Fetching countries with free numbers...")
+        await callback_query.answer("Загружаю страны с бесплатными номерами...")
         try:
             data = await self._get_free_list()
             buttons = [(c['country_text'], f"free_country:{c['country']}") for c in data['countries']]
-            keyboard = create_paginated_keyboard(buttons, 0, 15, "free_country_page") # Pagination not fully implemented here for brevity
-            keyboard.inline_keyboard.append([InlineKeyboardButton("⬅️ Back to Main Menu", callback_data="main_menu")])
-            await callback_query.message.edit_text("Select a country to see free numbers:", reply_markup=keyboard)
+            keyboard = create_paginated_keyboard(buttons, 0, 15, "free_country_page")
+            keyboard.inline_keyboard.append([InlineKeyboardButton("⬅️ Назад в главное меню", callback_data="main_menu")])
+            await callback_query.message.edit_text("Выберите страну, чтобы увидеть бесплатные номера:", reply_markup=keyboard)
         except Exception as e:
-            logging.error(f"Error showing free countries: {e}")
-            await callback_query.message.edit_text("Could not fetch free numbers. Please try again later.")
+            logging.error(f"Ошибка при отображении бесплатных стран: {e}")
+            await callback_query.message.edit_text("Не удалось загрузить бесплатные номера. Попробуйте позже.")
 
     async def show_free_numbers(self, client: Client, callback_query: CallbackQuery):
         country_id = int(callback_query.matches[0].group(1))
-        await callback_query.answer("Fetching numbers...")
+        await callback_query.answer("Загружаю номера...")
         try:
             data = await self._get_free_list()
             country_data = next((c for c in data['countries'] if c['country'] == country_id), None)
             if not country_data or not country_data.get('numbers'):
-                await callback_query.message.edit_text("No free numbers found for this country.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back to Countries", callback_data="free_numbers_menu")]]))
+                await callback_query.message.edit_text("Не найдено бесплатных номеров для этой страны.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад к странам", callback_data="free_numbers_menu")]]))
                 return
 
             buttons = [(n['full_number'], f"free_number:{n['full_number']}") for n in country_data['numbers']]
-            keyboard = create_paginated_keyboard(buttons, 0, 10, "free_number_page") # Pagination not implemented
-            keyboard.inline_keyboard.append([InlineKeyboardButton("⬅️ Back to Countries", callback_data="free_numbers_menu")])
-            await callback_query.message.edit_text("Select a number to view SMS:", reply_markup=keyboard)
+            keyboard = create_paginated_keyboard(buttons, 0, 10, "free_number_page")
+            keyboard.inline_keyboard.append([InlineKeyboardButton("⬅️ Назад к странам", callback_data="free_numbers_menu")])
+            await callback_query.message.edit_text("Выберите номер для просмотра СМС:", reply_markup=keyboard)
         except Exception as e:
-            logging.error(f"Error showing free numbers: {e}")
-            await callback_query.message.edit_text("An error occurred.")
+            logging.error(f"Ошибка при отображении бесплатных номеров: {e}")
+            await callback_query.message.edit_text("Произошла ошибка.")
 
     async def show_free_sms(self, client: Client, callback_query: CallbackQuery):
         number = callback_query.matches[0].group(1)
-        await callback_query.answer("Fetching SMS...")
+        await callback_query.answer("Загружаю СМС...")
         try:
-            data = await self._get_free_list() # Re-fetch to get latest SMS
-            sms_text = "No SMS found for this number."
+            data = await self._get_free_list()
+            sms_text = "Для этого номера не найдено СМС."
             for country in data['countries']:
                 for num_data in country.get('numbers', []):
                     if num_data['full_number'] == number:
                         messages = num_data.get('messages', [])
                         if messages:
-                            sms_text = f"**Last 5 SMS for {number}:**\n\n" + "\n".join([
+                            sms_text = f"**Последние 5 СМС для {number}:**\n\n" + "\n".join([
                                 f"- `{msg['text']}` ({msg['in_date']})" for msg in messages[:5]
                             ])
                         break
@@ -77,7 +77,7 @@ class FreeNumbersHandlers:
                     continue
                 break
 
-            await callback_query.message.edit_text(sms_text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back to Countries", callback_data="free_numbers_menu")]]))
+            await callback_query.message.edit_text(sms_text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад к странам", callback_data="free_numbers_menu")]]))
         except Exception as e:
-            logging.error(f"Error showing free SMS: {e}")
-            await callback_query.message.edit_text("An error occurred.")
+            logging.error(f"Ошибка при отображении бесплатных СМС: {e}")
+            await callback_query.message.edit_text("Произошла ошибка.")
