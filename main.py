@@ -1,5 +1,10 @@
+# Этот файл является главной точкой входа для запуска Telegram-бота.
+# Он инициализирует клиент бота, регистрирует все обработчики команд
+# и запускает бота в режим постоянной работы.
+
 import logging
 from pyrogram import Client
+from config import BOT_TOKEN, ADMIN_ID, API_ID, API_HASH, ONLINE_SIM_API_KEY
 from bot.api import OnlineSimAPI
 from bot.db import Database
 from config import API_ID, API_HASH, BOT_TOKEN

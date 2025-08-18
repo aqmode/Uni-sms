@@ -17,7 +17,7 @@ class SupportHandlers:
         return [
             CallbackQueryHandler(self.initiate_support, filters.regex("^support$")),
             CallbackQueryHandler(self.close_support, filters.regex("^close_support$")),
-            MessageHandler(self.user_to_admin_handler, filters.private & ~filters.command & ~filters.user(self.admin_id)),
+            MessageHandler(self.user_to_admin_handler, filters.private & ~filters.command),
             MessageHandler(self.admin_to_user_handler, filters.private & filters.user(self.admin_id) & filters.reply),
         ]
 
@@ -47,6 +47,10 @@ class SupportHandlers:
 
     async def user_to_admin_handler(self, client: Client, message: Message):
         user_id = message.from_user.id
+        # Manually filter out the admin
+        if user_id == self.admin_id:
+            return
+
         if user_id in active_support_chats:
             admin_id = active_support_chats[user_id]
             try:
