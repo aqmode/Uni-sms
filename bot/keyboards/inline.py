@@ -7,7 +7,6 @@ def main_menu_keyboard():
     keyboard = [
         [
             InlineKeyboardButton("🛒 Купить номер", callback_data="buy_menu"),
-            InlineKeyboardButton("🗓 Арендовать номер", callback_data="rent_menu"),
         ],
         [
             InlineKeyboardButton("👤 Мой кабинет", callback_data="account_menu"),

@@ -6,9 +6,11 @@ from pyrogram.handlers import CallbackQueryHandler
 from bot.api import SmsActivateWrapper
 from bot.db import Database
 from bot.utils import create_paginated_keyboard
+from bot.states import set_user_state, clear_user_state
 
 COUNTRY_LIST_CACHE = []
 SERVICE_PRICE_CACHE = {} # key: country_id, value: dict of services
+SERVICE_NAME_CACHE = {} # key: short_code, value: full_name
 
 class BuyNumberHandlers:
     def __init__(self, db: Database, api: SmsActivateWrapper):
@@ -19,24 +21,56 @@ class BuyNumberHandlers:
         return [
             CallbackQueryHandler(self.show_countries, filters.regex("^buy_menu$")),
             CallbackQueryHandler(self.show_countries_paginated, filters.regex(r"^buy_country_page:(\d+)$")),
+            CallbackQueryHandler(self.search_country_handler, filters.regex("^search_country$")),
             CallbackQueryHandler(self.show_services, filters.regex(r"^buy_country:(\d+)$")),
+            CallbackQueryHandler(self.search_service_handler, filters.regex(r"^search_service:(\d+)$")),
             CallbackQueryHandler(self.purchase_number, filters.regex(r"^buy_service:(.+):(\d+)$")),
         ]
 
-    async def show_countries(self, client: Client, callback_query: CallbackQuery, page=0):
+    async def search_country_handler(self, client: Client, callback_query: CallbackQuery):
+        user_id = callback_query.from_user.id
+        set_user_state(user_id, 'searching_country')
+        await callback_query.message.edit_text("Пожалуйста, введите название страны для поиска:")
+        await callback_query.answer()
+
+    async def search_service_handler(self, client: Client, callback_query: CallbackQuery):
+        user_id = callback_query.from_user.id
+        country_id = int(callback_query.matches[0].group(1))
+        set_user_state(user_id, 'searching_service', context={'country_id': country_id})
+        await callback_query.message.edit_text("Пожалуйста, введите название сервиса для поиска:")
+        await callback_query.answer()
+
+    async def show_countries(self, client: Client, callback_query: CallbackQuery, page=0, search_query=None):
         await callback_query.answer("Загрузка стран...")
         try:
             if not COUNTRY_LIST_CACHE:
+                # Fetch both full list and top countries list
                 countries_data = await self.api.get_countries()
-                if isinstance(countries_data, dict):
-                    COUNTRY_LIST_CACHE.extend(sorted(countries_data.values(), key=lambda x: x['rus']))
-                else:
-                    raise Exception(f"Unexpected country list format: {countries_data}")
+                top_countries_data = await self.api.get_top_countries()
 
-            buttons = [(f"{c['rus']}", f"buy_country:{c['id']}") for c in COUNTRY_LIST_CACHE]
-            keyboard = create_paginated_keyboard(buttons, page, 15, "buy_country_page")
+                if not isinstance(countries_data, dict) or not isinstance(top_countries_data, dict):
+                    raise Exception("Invalid data format from API")
+
+                # Get a set of top country IDs for quick lookup
+                top_country_ids = set(int(country_id) for country_id in top_countries_data.keys())
+
+                all_countries = list(countries_data.values())
+
+                # Sort the list: popular countries first, then the rest alphabetically
+                all_countries.sort(key=lambda c: (c['id'] not in top_country_ids, c['rus']))
+
+                COUNTRY_LIST_CACHE.extend(all_countries)
+
+
+            countries_to_show = COUNTRY_LIST_CACHE
+            if search_query:
+                countries_to_show = [c for c in COUNTRY_LIST_CACHE if search_query.lower() in c['rus'].lower()]
+
+            buttons = [(f"{c['rus']}", f"buy_country:{c['id']}") for c in countries_to_show]
+            keyboard = create_paginated_keyboard(buttons, page, 18, "buy_country_page", columns=3) # 3 columns
+            keyboard.inline_keyboard.append([InlineKeyboardButton("🔎 Поиск", callback_data="search_country")])
             keyboard.inline_keyboard.append([InlineKeyboardButton("⬅️ Назад в главное меню", callback_data="main_menu")])
-            await callback_query.message.edit_text("Пожалуйста, выберите страну:", reply_markup=keyboard)
+            await callback_query.message.edit_text("Пожалуйста, выберите страну (сначала популярные):", reply_markup=keyboard)
         except Exception as e:
             logging.error(f"Ошибка при отображении стран: {e}")
             await callback_query.message.edit_text("Не удалось загрузить список стран.")
@@ -45,10 +79,20 @@ class BuyNumberHandlers:
         page = int(callback_query.matches[0].group(1))
         await self.show_countries(client, callback_query, page=page)
 
-    async def show_services(self, client: Client, callback_query: CallbackQuery, page=0):
+    async def show_services(self, client: Client, callback_query: CallbackQuery, page=0, search_query=None):
         country_id = int(callback_query.matches[0].group(1))
         await callback_query.answer("Загрузка сервисов...")
         try:
+            # Populate service name cache if it's empty
+            if not SERVICE_NAME_CACHE:
+                services_list_data = await self.api.get_services_list()
+                if isinstance(services_list_data, dict) and services_list_data.get('status') == 'success':
+                    for service in services_list_data.get('services', []):
+                        SERVICE_NAME_CACHE[service['code']] = service['name']
+                else:
+                    logging.error(f"Could not fetch service names: {services_list_data}")
+
+            # Get prices for the selected country
             if country_id not in SERVICE_PRICE_CACHE:
                 prices_data = await self.api.get_prices(country_id)
                 if isinstance(prices_data, dict):
@@ -61,8 +105,23 @@ class BuyNumberHandlers:
                 await callback_query.message.edit_text("Для этой страны нет доступных сервисов.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад к странам", callback_data="buy_menu")]]))
                 return
 
-            buttons = [(f"{service} - {details['cost']} RUB ({details['count']} шт.)", f"buy_service:{service}:{country_id}") for service, details in country_prices.items()]
-            keyboard = create_paginated_keyboard(buttons, page, 15, f"buy_service_page:{country_id}")
+            buttons = []
+
+            services_to_show = country_prices.items()
+            if search_query:
+                services_to_show = [
+                    (sc, dt) for sc, dt in country_prices.items()
+                    if search_query.lower() in SERVICE_NAME_CACHE.get(sc, sc).lower()
+                ]
+
+            for service_code, details in services_to_show:
+                # Use the full name from the cache, or default to the code
+                full_name = SERVICE_NAME_CACHE.get(service_code, service_code)
+                button_text = f"{full_name} - {details['cost']} RUB ({details['count']} шт.)"
+                buttons.append((button_text, f"buy_service:{service_code}:{country_id}"))
+
+            keyboard = create_paginated_keyboard(buttons, page, 12, f"buy_service_page:{country_id}", columns=2) # 2 columns
+            keyboard.inline_keyboard.append([InlineKeyboardButton("🔎 Поиск", callback_data=f"search_service:{country_id}")])
             keyboard.inline_keyboard.append([InlineKeyboardButton("⬅️ Назад к странам", callback_data="buy_menu")])
             await callback_query.message.edit_text("Пожалуйста, выберите сервис:", reply_markup=keyboard)
         except Exception as e:

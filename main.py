@@ -25,10 +25,10 @@ from bot.db import Database
 from bot.handlers.start import StartHandlers
 from bot.handlers.balance import BalanceHandlers
 from bot.handlers.buy_number import BuyNumberHandlers
-# from bot.handlers.rent_number import RentNumberHandlers # Temporarily disabled
 from bot.handlers.history import HistoryHandlers
 from bot.handlers.billing import BillingHandlers
 from bot.handlers.admin import AdminHandlers
+from bot.handlers.search import SearchHandlers
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
@@ -49,10 +49,10 @@ class UniSMSBot(Client):
             StartHandlers(self.db),
             BalanceHandlers(self.db, self.api),
             BuyNumberHandlers(self.db, self.api),
-            # RentNumberHandlers(self.db, self.api), # Temporarily disabled
             HistoryHandlers(self.db),
             BillingHandlers(),
             AdminHandlers(self.db),
+            SearchHandlers(),
         ]
 
         for handler_class in handler_classes:

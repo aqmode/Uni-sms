@@ -40,6 +40,14 @@ class SmsActivateWrapper:
         # Method is getPrices(country=...)
         return await self._run_sync(self.sa.getPrices, country=country_id)
 
+    async def get_services_list(self):
+        # Method is getServicesList()
+        return await self._run_sync(self.sa.getServicesList)
+
+    async def get_top_countries(self):
+        # Method is getTopCountriesByService()
+        return await self._run_sync(self.sa.getTopCountriesByService)
+
     async def get_number(self, service: str, country_id: int):
         # Method is getNumber(service=..., country=...)
         # It returns a dict with activation details
