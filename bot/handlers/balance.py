@@ -2,18 +2,17 @@ import logging
 from pyrogram import Client, filters
 from pyrogram.types import Message, CallbackQuery
 from pyrogram.handlers import MessageHandler, CallbackQueryHandler
-from bot.api import SmsActivateAPI
+from bot.api import SmsActivateWrapper
 from bot.db import Database
 from bot.keyboards.inline import account_menu_keyboard
 from config import ADMIN_ID
 
 class BalanceHandlers:
-    def __init__(self, db: Database, api: SmsActivateAPI):
+    def __init__(self, db: Database, api: SmsActivateWrapper):
         self.db = db
         self.api = api
 
     def get_handlers(self):
-        """Returns a list of handlers for registration."""
         return [
             MessageHandler(self.balance_command_handler, filters.command("balance")),
             CallbackQueryHandler(self.balance_callback_handler, filters.regex("^check_balance$")),
@@ -21,12 +20,11 @@ class BalanceHandlers:
         ]
 
     async def service_balance_handler(self, client: Client, message: Message):
-        """Handles the /service_balance command for the admin."""
         await message.reply_text("Запрашиваю баланс сервиса...")
         try:
             response = await self.api.get_balance()
-            if "ACCESS_BALANCE" in response:
-                balance = response.split(':')[1]
+            if isinstance(response, dict) and 'balance' in response:
+                balance = response['balance']
                 await message.reply_text(f"Баланс на sms-activate.ru: **{balance}**")
             else:
                 await message.reply_text(f"Не удалось получить баланс сервиса. Ответ: `{response}`")
@@ -34,7 +32,6 @@ class BalanceHandlers:
             await message.reply_text(f"Ошибка при запросе баланса сервиса: {e}")
 
     async def get_balance_text(self, user_id: int):
-        """Получает и форматирует текст с внутренним балансом пользователя."""
         try:
             balance_kopecks = self.db.get_user_balance(user_id)
             balance_rub = balance_kopecks / 100.0
@@ -44,7 +41,6 @@ class BalanceHandlers:
             return "Произошла ошибка при получении вашего баланса."
 
     async def balance_command_handler(self, client: Client, message: Message):
-        """Обрабатывает команду /balance."""
         balance_text = await self.get_balance_text(message.from_user.id)
         await message.reply_text(
             "**Личный кабинет**\n\n" + balance_text,
@@ -52,7 +48,6 @@ class BalanceHandlers:
         )
 
     async def balance_callback_handler(self, client: Client, callback_query: CallbackQuery):
-        """Обрабатывает кнопку 'Баланс' из меню кабинета."""
         await callback_query.answer("Загрузка баланса...", show_alert=False)
         balance_text = await self.get_balance_text(callback_query.from_user.id)
         await callback_query.message.edit_text(

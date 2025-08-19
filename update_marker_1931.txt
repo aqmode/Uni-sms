@@ -1,0 +1,1 @@
+This version contains the full refactor to use the official smsactivate library for the 'buy' functionality. The 'rent' feature is temporarily disabled.

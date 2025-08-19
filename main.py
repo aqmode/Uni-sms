@@ -20,7 +20,7 @@ except ImportError:
     sys.exit("Бот не может быть запущен без полной конфигурации.")
 
 # Импортируем остальные компоненты
-from bot.api import SmsActivateAPI
+from bot.api import SmsActivateWrapper
 from bot.db import Database
 from bot.handlers.start import StartHandlers
 from bot.handlers.balance import BalanceHandlers
@@ -41,7 +41,7 @@ class UniSMSBot(Client):
             bot_token=BOT_TOKEN
         )
         self.db = Database()
-        self.api = SmsActivateAPI() # Используем новый API
+        self.api = SmsActivateWrapper() # Используем новый API
 
     def register_handlers(self):
         """Registers all handlers for the bot."""
@@ -49,7 +49,7 @@ class UniSMSBot(Client):
             StartHandlers(self.db),
             BalanceHandlers(self.db, self.api),
             BuyNumberHandlers(self.db, self.api),
-            RentNumberHandlers(self.db, self.api),
+            # RentNumberHandlers(self.db, self.api), # Temporarily disabled
             HistoryHandlers(self.db),
             BillingHandlers(),
             AdminHandlers(self.db),
