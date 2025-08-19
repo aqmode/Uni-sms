@@ -1,0 +1,1 @@
+This file marks the final fix for the sms-activate migration. All import errors should be resolved.

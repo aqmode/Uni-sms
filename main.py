@@ -3,16 +3,29 @@
 # и запускает бота в режим постоянной работы.
 
 import logging
+import sys
 from pyrogram import Client
-from config import BOT_TOKEN, ADMIN_ID, API_ID, API_HASH, ONLINE_SIM_API_KEY
-from bot.api import OnlineSimAPI
+
+# Импортируем переменные настроек и проверяем их наличие до всего остального
+try:
+    from config import BOT_TOKEN, ADMIN_ID, API_ID, API_HASH, SMS_ACTIVATE_API_KEY
+    if not all([BOT_TOKEN, ADMIN_ID, API_ID, API_HASH, SMS_ACTIVATE_API_KEY]):
+        raise ImportError
+except ImportError:
+    print("!!! ОШИБКА: НЕОБХОДИМА НАСТРОЙКА !!!")
+    print("Пожалуйста, выполните следующие шаги:")
+    print("1. Скопируйте файл `settings.py.example` и переименуйте его в `settings.py`.")
+    print("2. Откройте `settings.py` и впишите ваши данные (API_ID, API_HASH, BOT_TOKEN и т.д.).")
+    print("3. Сохраните файл и запустите бота снова.")
+    sys.exit("Бот не может быть запущен без полной конфигурации.")
+
+# Импортируем остальные компоненты
+from bot.api import SmsActivateAPI
 from bot.db import Database
-from config import API_ID, API_HASH, BOT_TOKEN
 from bot.handlers.start import StartHandlers
 from bot.handlers.balance import BalanceHandlers
 from bot.handlers.buy_number import BuyNumberHandlers
 from bot.handlers.rent_number import RentNumberHandlers
-# from bot.handlers.support import SupportHandlers # Temporarily disabled
 from bot.handlers.history import HistoryHandlers
 from bot.handlers.billing import BillingHandlers
 from bot.handlers.admin import AdminHandlers
@@ -28,7 +41,7 @@ class UniSMSBot(Client):
             bot_token=BOT_TOKEN
         )
         self.db = Database()
-        self.online_sim_api = OnlineSimAPI()
+        self.api = SmsActivateAPI() # Используем новый API
 
     def register_handlers(self):
         """Registers all handlers for the bot."""
@@ -37,7 +50,6 @@ class UniSMSBot(Client):
             BalanceHandlers(self.db, self.api),
             BuyNumberHandlers(self.db, self.api),
             RentNumberHandlers(self.db, self.api),
-            # SupportHandlers(), # Temporarily disabled
             HistoryHandlers(self.db),
             BillingHandlers(),
             AdminHandlers(self.db),
@@ -47,26 +59,16 @@ class UniSMSBot(Client):
             for handler in handler_class.get_handlers():
                 self.add_handler(handler)
 
-        logging.info("Handlers registered successfully.")
+        logging.info("Обработчики успешно зарегистрированы.")
 
     def run(self):
         """Runs the bot by registering handlers and then starting the client."""
-        logging.info("Registering handlers...")
+        logging.info("Регистрация обработчиков...")
         self.register_handlers()
-        logging.info("Starting bot...")
+        logging.info("Запуск бота...")
         super().run()
 
 
 if __name__ == "__main__":
-    # Startup Check
-    if not BOT_TOKEN or not ADMIN_ID or not API_ID or not API_HASH or not SMS_ACTIVATE_API_KEY:
-        import sys
-        print("!!! ОШИБКА: НЕОБХОДИМА НАСТРОЙКА !!!")
-        print("Пожалуйста, выполните следующие шаги:")
-        print("1. Скопируйте файл `settings.py.example` и переименуйте его в `settings.py`.")
-        print("2. Откройте `settings.py` и впишите ваши данные (API_ID, API_HASH, BOT_TOKEN и т.д.).")
-        print("3. Сохраните файл и запустите бота снова.")
-        sys.exit("Бот не может быть запущен без полной конфигурации.")
-
     bot = UniSMSBot()
     bot.run()

@@ -2,9 +2,10 @@ import logging
 from pyrogram import Client, filters
 from pyrogram.types import Message, CallbackQuery
 from pyrogram.handlers import MessageHandler, CallbackQueryHandler
-from bot.api import OnlineSimAPI
+from bot.api import SmsActivateAPI
 from bot.db import Database
 from bot.keyboards.inline import account_menu_keyboard
+from config import ADMIN_ID
 
 class BalanceHandlers:
     def __init__(self, db: Database, api: SmsActivateAPI):
