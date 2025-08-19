@@ -13,7 +13,7 @@ from bot.handlers.balance import BalanceHandlers
 from bot.handlers.buy_number import BuyNumberHandlers
 from bot.handlers.rent_number import RentNumberHandlers
 from bot.handlers.free_numbers import FreeNumbersHandlers
-from bot.handlers.support import SupportHandlers
+# from bot.handlers.support import SupportHandlers # Temporarily disabled
 from bot.handlers.history import HistoryHandlers
 from bot.handlers.billing import BillingHandlers
 from bot.handlers.admin import AdminHandlers
@@ -39,7 +39,7 @@ class UniSMSBot(Client):
             BuyNumberHandlers(self.db, self.online_sim_api),
             RentNumberHandlers(self.db, self.online_sim_api),
             FreeNumbersHandlers(self.online_sim_api),
-            SupportHandlers(),
+            # SupportHandlers(), # Temporarily disabled
             HistoryHandlers(self.db),
             BillingHandlers(),
             AdminHandlers(self.db),
