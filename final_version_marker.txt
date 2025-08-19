@@ -1,0 +1,2 @@
+This version contains the complete migration to sms-activate.ru and all bug fixes.
+All files are in a correct and consistent state. Please delete your old project folder and use a fresh copy of this version.
