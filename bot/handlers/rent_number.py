@@ -3,7 +3,7 @@ import datetime
 from pyrogram import Client, filters
 from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from pyrogram.handlers import CallbackQueryHandler
-from bot.api import SmsActivateAPI
+from bot.api import SmsActivateWrapper
 from bot.db import Database
 from bot.utils import create_paginated_keyboard
 
@@ -11,7 +11,7 @@ from bot.utils import create_paginated_keyboard
 RENT_TARIFFS_CACHE = {}
 
 class RentNumberHandlers:
-    def __init__(self, db: Database, api: SmsActivateAPI):
+    def __init__(self, db: Database, api: SmsActivateWrapper):
         self.db = db
         self.api = api
 

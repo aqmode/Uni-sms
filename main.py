@@ -25,7 +25,7 @@ from bot.db import Database
 from bot.handlers.start import StartHandlers
 from bot.handlers.balance import BalanceHandlers
 from bot.handlers.buy_number import BuyNumberHandlers
-from bot.handlers.rent_number import RentNumberHandlers
+# from bot.handlers.rent_number import RentNumberHandlers # Temporarily disabled
 from bot.handlers.history import HistoryHandlers
 from bot.handlers.billing import BillingHandlers
 from bot.handlers.admin import AdminHandlers
