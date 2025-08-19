@@ -1,0 +1,1 @@
+This file marks the completion of the migration to the sms-activate.ru API.

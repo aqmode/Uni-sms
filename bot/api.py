@@ -1,78 +1,96 @@
+import asyncio
+import logging
 import aiohttp
-from config import ONLINE_SIM_API_KEY
+from config import SMS_ACTIVATE_API_KEY
 
-class OnlineSimAPI:
+class SmsActivateAPI:
     """
-    An asynchronous wrapper for the onlinesim.io API.
+    An asynchronous wrapper for the sms-activate.ru API (v2).
     """
-    BASE_URL = "https://onlinesim.io/api"
+    BASE_URL = "https://api.sms-activate.ru/stubs/handler_api.php" # Using stub for safety, can be changed
 
-    def __init__(self, api_key: str = ONLINE_SIM_API_KEY):
+    def __init__(self, api_key: str = SMS_ACTIVATE_API_KEY):
         self.api_key = api_key
 
-    async def _request(self, endpoint: str, params: dict = None):
+    async def _request(self, action: str, params: dict = None):
         """Makes a request to the API."""
         if params is None:
             params = {}
-        params['apikey'] = self.api_key
+        params['api_key'] = self.api_key
+        params['action'] = action
 
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(f"{self.BASE_URL}/{endpoint}", params=params, timeout=30) as response: # Increased timeout
+                async with session.get(self.BASE_URL, params=params, timeout=30) as response:
                     response.raise_for_status()
-                    return await response.json()
+                    # The API returns plain text for some calls, JSON for others.
+                    text_response = await response.text()
+                    try:
+                        # Try to parse as JSON
+                        return await response.json(content_type=None)
+                    except aiohttp.ContentTypeError:
+                        # If it fails, return the plain text
+                        return text_response
         except asyncio.TimeoutError:
-            raise Exception("TimeoutError") # Raise a specific, simple exception for timeouts
+            raise Exception("TimeoutError")
         except aiohttp.ClientError as e:
-            raise Exception(f"Network error communicating with Onlinesim API: {e}")
+            raise Exception(f"Network error: {e}")
 
     async def get_balance(self):
         """Get account balance."""
-        return await self._request("getBalance.php")
+        return await self._request("getBalance")
 
-    async def get_tariffs(self):
-        """Get tariffs for purchasing numbers."""
-        return await self._request("getTariffs.php")
+    async def get_prices(self, service: str = '', country: int = None):
+        """Get prices and counts for services."""
+        params = {'service': service}
+        if country is not None:
+            params['country'] = country
+        return await self._request("getPrices", params)
 
-    async def get_num(self, service: str, country: int):
-        """Purchase a number."""
+    async def get_number(self, service: str, country: int, operator: str = None):
+        """Get a number for activation."""
         params = {'service': service, 'country': country}
-        return await self._request("getNum.php", params)
+        if operator:
+            params['operator'] = operator
+        # Using V2 for the structured JSON response
+        return await self._request("getNumberV2", params)
 
-    async def get_state(self, tzid: int):
-        """Get the state of an operation."""
-        params = {'tzid': tzid}
-        return await self._request("getState.php", params)
+    async def get_status(self, activation_id: int):
+        """Get the status of an activation."""
+        return await self._request("getStatus", {'id': activation_id})
 
-    async def set_operation_ok(self, tzid: int):
-        """Set operation as completed."""
-        params = {'tzid': tzid}
-        return await self._request("setOperationOk.php", params)
+    async def set_status(self, activation_id: int, status: int):
+        """
+        Set the status of an activation.
+        status: 1=ready, 3=request another sms, 6=finish, 8=cancel
+        """
+        return await self._request("setStatus", {'id': activation_id, 'status': status})
 
-    async def get_tariffs_rent(self):
-        """Get tariffs for renting numbers."""
-        return await self._request("tariffsRent.php")
+    # --- Rent Methods ---
 
-    async def get_rent_num(self, service: str, country: int, days: int = 30):
+    async def get_rent_services_and_countries(self):
+        """Get available services and countries for rent."""
+        return await self._request("getRentServicesAndCountries")
+
+    async def get_rent_number(self, service: str, country: int, rent_time: int = 4, operator: str = None):
         """Rent a number."""
-        params = {'service': service, 'country': country, 'days': days}
-        return await self._request("getRentNum.php", params)
+        params = {
+            'service': service,
+            'country': country,
+            'rent_time': rent_time
+        }
+        if operator:
+            params['operator'] = operator
+        return await self._request("getRentNumber", params)
 
-    async def extend_rent_state(self, tzid: int, days: int = 30):
-        """Extend a number rental."""
-        params = {'tzid': tzid, 'days': days}
-        return await self._request("extendRentState.php", params)
+    async def get_rent_status(self, activation_id: int):
+        """Get the status and SMS list for a rental."""
+        return await self._request("getRentStatus", {'id': activation_id})
 
-    async def get_rent_state(self, tzid: int):
-        """Get the state of a rental."""
-        params = {'tzid': tzid}
-        return await self._request("getRentState.php", params)
+    async def set_rent_status(self, activation_id: int, status: int):
+        """Set the status of a rental. 1=finish, 2=cancel."""
+        return await self._request("setRentStatus", {'id': activation_id, 'status': status})
 
-    async def close_rent_num(self, tzid: int):
-        """Close a number rental."""
-        params = {'tzid': tzid}
-        return await self._request("closeRentNum.php", params)
-
-    async def get_free_list(self):
-        """Get the list of free numbers."""
-        return await self._request("getFreeList.php")
+    async def continue_rent_number(self, activation_id: int, rent_time: int = 4):
+        """Extend a rental."""
+        return await self._request("continueRentNumber", {'id': activation_id, 'rent_time': rent_time})

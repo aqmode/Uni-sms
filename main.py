@@ -12,7 +12,6 @@ from bot.handlers.start import StartHandlers
 from bot.handlers.balance import BalanceHandlers
 from bot.handlers.buy_number import BuyNumberHandlers
 from bot.handlers.rent_number import RentNumberHandlers
-from bot.handlers.free_numbers import FreeNumbersHandlers
 # from bot.handlers.support import SupportHandlers # Temporarily disabled
 from bot.handlers.history import HistoryHandlers
 from bot.handlers.billing import BillingHandlers
@@ -35,10 +34,9 @@ class UniSMSBot(Client):
         """Registers all handlers for the bot."""
         handler_classes = [
             StartHandlers(self.db),
-            BalanceHandlers(self.db, self.online_sim_api),
-            BuyNumberHandlers(self.db, self.online_sim_api),
-            RentNumberHandlers(self.db, self.online_sim_api),
-            FreeNumbersHandlers(self.online_sim_api),
+            BalanceHandlers(self.db, self.api),
+            BuyNumberHandlers(self.db, self.api),
+            RentNumberHandlers(self.db, self.api),
             # SupportHandlers(), # Temporarily disabled
             HistoryHandlers(self.db),
             BillingHandlers(),
@@ -61,7 +59,7 @@ class UniSMSBot(Client):
 
 if __name__ == "__main__":
     # Startup Check
-    if not BOT_TOKEN or not ADMIN_ID or not API_ID or not API_HASH or not ONLINE_SIM_API_KEY:
+    if not BOT_TOKEN or not ADMIN_ID or not API_ID or not API_HASH or not SMS_ACTIVATE_API_KEY:
         import sys
         print("!!! ОШИБКА: НЕОБХОДИМА НАСТРОЙКА !!!")
         print("Пожалуйста, выполните следующие шаги:")

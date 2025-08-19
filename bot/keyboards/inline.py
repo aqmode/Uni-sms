@@ -10,7 +10,6 @@ def main_menu_keyboard():
             InlineKeyboardButton("🗓 Арендовать номер", callback_data="rent_menu"),
         ],
         [
-            InlineKeyboardButton("🆓 Бесплатные номера", callback_data="free_numbers_menu"),
             InlineKeyboardButton("👤 Мой кабинет", callback_data="account_menu"),
         ],
         [

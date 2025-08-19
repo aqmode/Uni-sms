@@ -7,7 +7,7 @@ from bot.db import Database
 from bot.keyboards.inline import account_menu_keyboard
 
 class BalanceHandlers:
-    def __init__(self, db: Database, api: OnlineSimAPI):
+    def __init__(self, db: Database, api: SmsActivateAPI):
         self.db = db
         self.api = api
 
@@ -16,7 +16,21 @@ class BalanceHandlers:
         return [
             MessageHandler(self.balance_command_handler, filters.command("balance")),
             CallbackQueryHandler(self.balance_callback_handler, filters.regex("^check_balance$")),
+            MessageHandler(self.service_balance_handler, filters.command("service_balance") & filters.user(int(ADMIN_ID))),
         ]
+
+    async def service_balance_handler(self, client: Client, message: Message):
+        """Handles the /service_balance command for the admin."""
+        await message.reply_text("Запрашиваю баланс сервиса...")
+        try:
+            response = await self.api.get_balance()
+            if "ACCESS_BALANCE" in response:
+                balance = response.split(':')[1]
+                await message.reply_text(f"Баланс на sms-activate.ru: **{balance}**")
+            else:
+                await message.reply_text(f"Не удалось получить баланс сервиса. Ответ: `{response}`")
+        except Exception as e:
+            await message.reply_text(f"Ошибка при запросе баланса сервиса: {e}")
 
     async def get_balance_text(self, user_id: int):
         """Получает и форматирует текст с внутренним балансом пользователя."""
