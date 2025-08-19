@@ -18,11 +18,12 @@ class OnlineSimAPI:
 
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(f"{self.BASE_URL}/{endpoint}", params=params, timeout=15) as response:
+                async with session.get(f"{self.BASE_URL}/{endpoint}", params=params, timeout=30) as response: # Increased timeout
                     response.raise_for_status()
                     return await response.json()
+        except asyncio.TimeoutError:
+            raise Exception("TimeoutError") # Raise a specific, simple exception for timeouts
         except aiohttp.ClientError as e:
-            # Re-raise as a generic exception that handlers can catch
             raise Exception(f"Network error communicating with Onlinesim API: {e}")
 
     async def get_balance(self):

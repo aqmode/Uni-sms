@@ -16,7 +16,7 @@ from bot.api import OnlineSimAPI
 from bot.db import Database
 from bot.utils import create_paginated_keyboard
 
-tariffs_cache = {}
+from bot.cache import get_buy_tariffs
 
 class BuyNumberHandlers:
     def __init__(self, db: Database, api: OnlineSimAPI):
@@ -32,28 +32,21 @@ class BuyNumberHandlers:
             CallbackQueryHandler(self.purchase_number, filters.regex(r"^buy_service:(.+):(\d+)$")),
         ]
 
-    async def _get_tariffs(self):
-        if "tariffs" not in tariffs_cache:
-            logging.info("Fetching tariffs from API...")
-            full_tariffs = await self.api.get_tariffs()
-            if full_tariffs.get("response") != "1":
-                raise Exception("Failed to fetch tariffs from API")
-            tariffs_cache["tariffs"] = full_tariffs
-            tariffs_cache["countries"] = sorted(full_tariffs.get("countries", []), key=lambda x: x['name_en'])
-            tariffs_cache["services"] = full_tariffs.get("services", [])
-        return tariffs_cache["tariffs"]
-
     async def show_countries(self, client: Client, callback_query: CallbackQuery, page=0):
         await callback_query.answer("Загрузка стран...")
         try:
-            await self._get_tariffs()
-            buttons = [(f"🇺🇸 {c['name_en']}", f"buy_country:{c['id']}") for c in tariffs_cache["countries"]]
+            buy_tariffs = get_buy_tariffs()
+            countries = sorted(buy_tariffs.get("countries", []), key=lambda x: x['name_en'])
+            buttons = [(f"🇺🇸 {c['name_en']}", f"buy_country:{c['id']}") for c in countries]
+
             keyboard = create_paginated_keyboard(buttons, page, 15, "buy_country_page")
             keyboard.inline_keyboard.append([InlineKeyboardButton("⬅️ Назад в главное меню", callback_data="main_menu")])
             await callback_query.message.edit_text("Пожалуйста, выберите страну:", reply_markup=keyboard)
         except Exception as e:
+            error_text = "Не удалось загрузить список стран. Убедитесь, что вы создали файл `tariffs.json`, запустив `python fetch_tariffs.py`."
             logging.error(f"Ошибка при отображении стран: {e}")
-            await callback_query.message.edit_text("Не удалось загрузить список стран. Пожалуйста, попробуйте позже.")
+            if callback_query.message.text != error_text:
+                await callback_query.message.edit_text(error_text)
 
     async def show_countries_paginated(self, client: Client, callback_query: CallbackQuery):
         page = int(callback_query.matches[0].group(1))
@@ -63,8 +56,8 @@ class BuyNumberHandlers:
         country_id = int(callback_query.matches[0].group(1))
         await callback_query.answer("Загрузка сервисов...")
         try:
-            tariffs = await self._get_tariffs()
-            country_services = [s for s in tariffs["services"] if s['country'] == country_id and s['count'] > 0]
+            buy_tariffs = get_buy_tariffs()
+            country_services = [s for s in buy_tariffs.get("services", []) if s['country'] == country_id and s.get('count', 0) > 0]
 
             if not country_services:
                 await callback_query.message.edit_text("Для этой страны нет доступных сервисов.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад к странам", callback_data="buy_menu")]]))
@@ -77,7 +70,7 @@ class BuyNumberHandlers:
             await callback_query.message.edit_text("Пожалуйста, выберите сервис:", reply_markup=keyboard)
         except Exception as e:
             logging.error(f"Ошибка при отображении сервисов: {e}")
-            await callback_query.message.edit_text("Не удалось загрузить список сервисов. Пожалуйста, попробуйте позже.")
+            await callback_query.message.edit_text("Не удалось загрузить список сервисов. Убедитесь, что файл `tariffs.json` существует.")
 
     async def show_services_paginated(self, client: Client, callback_query: CallbackQuery):
         country_id = int(callback_query.matches[0].group(1))
@@ -94,8 +87,8 @@ class BuyNumberHandlers:
         await callback_query.message.edit_text("⏳ Обработка покупки...")
 
         try:
-            tariffs = await self._get_tariffs()
-            service_info = next((s for s in tariffs["services"] if s['id'] == service_id_str and s['country'] == country_id), None)
+            buy_tariffs = get_buy_tariffs()
+            service_info = next((s for s in buy_tariffs.get("services", []) if s['id'] == service_id_str and s['country'] == country_id), None)
             if not service_info:
                 await callback_query.message.edit_text("Ошибка: Сервис не найден или больше не доступен.")
                 return
