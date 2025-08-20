@@ -1,0 +1,1 @@
+This file marks the fix for the recurring TypeError in the search handler.

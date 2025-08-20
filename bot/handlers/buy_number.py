@@ -1,16 +1,25 @@
 import asyncio
 import logging
 from pyrogram import Client, filters
-from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
+from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 from pyrogram.handlers import CallbackQueryHandler
 from bot.api import SmsActivateWrapper
+from config import IMAGE_COUNTRIES, IMAGE_SERVICES
 from bot.db import Database
 from bot.utils import create_paginated_keyboard
 from bot.states import set_user_state, clear_user_state
 
 COUNTRY_LIST_CACHE = []
 SERVICE_PRICE_CACHE = {} # key: country_id, value: dict of services
-SERVICE_NAME_CACHE = {} # key: short_code, value: full_name
+
+# Compromise: Hardcoded map for popular service names
+SERVICE_NAME_MAP = {
+    'tg': "Telegram", 'wa': "WhatsApp", 'vi': "Viber", 'ig': "Instagram",
+    'fb': "Facebook", 'go': "Google/YouTube", 'vk': "ВКонтакте",
+    'ok': "Одноклассники", 'mm': "Mail.ru", 'ya': "Яндекс",
+    'ds': "Discord", 'am': "Amazon", 'tw': "Twitter", 'st': "Steam",
+    'ub': "Uber", 'nf': "Netflix", 'tk': "TikTok", 'ot': "Любой другой"
+}
 
 class BuyNumberHandlers:
     def __init__(self, db: Database, api: SmsActivateWrapper):
@@ -44,23 +53,14 @@ class BuyNumberHandlers:
         await callback_query.answer("Загрузка стран...")
         try:
             if not COUNTRY_LIST_CACHE:
-                # Fetch both full list and top countries list
+                # SIMPLIFIED LOGIC: Just get all countries and sort alphabetically.
                 countries_data = await self.api.get_countries()
-                top_countries_data = await self.api.get_top_countries()
-
-                if not isinstance(countries_data, dict) or not isinstance(top_countries_data, dict):
+                if not isinstance(countries_data, dict):
                     raise Exception("Invalid data format from API")
 
-                # Get a set of top country IDs for quick lookup
-                top_country_ids = set(int(country_id) for country_id in top_countries_data.keys())
-
                 all_countries = list(countries_data.values())
-
-                # Sort the list: popular countries first, then the rest alphabetically
-                all_countries.sort(key=lambda c: (c['id'] not in top_country_ids, c['rus']))
-
+                all_countries.sort(key=lambda c: c['rus'])
                 COUNTRY_LIST_CACHE.extend(all_countries)
-
 
             countries_to_show = COUNTRY_LIST_CACHE
             if search_query:
@@ -70,10 +70,14 @@ class BuyNumberHandlers:
             keyboard = create_paginated_keyboard(buttons, page, 18, "buy_country_page", columns=3) # 3 columns
             keyboard.inline_keyboard.append([InlineKeyboardButton("🔎 Поиск", callback_data="search_country")])
             keyboard.inline_keyboard.append([InlineKeyboardButton("⬅️ Назад в главное меню", callback_data="main_menu")])
-            await callback_query.message.edit_text("Пожалуйста, выберите страну (сначала популярные):", reply_markup=keyboard)
+
+            await callback_query.message.edit_media(
+                media=InputMediaPhoto(media=IMAGE_COUNTRIES, caption="Пожалуйста, выберите страну (сначала популярные):"),
+                reply_markup=keyboard
+            )
         except Exception as e:
             logging.error(f"Ошибка при отображении стран: {e}")
-            await callback_query.message.edit_text("Не удалось загрузить список стран.")
+            await callback_query.message.edit_caption("Не удалось загрузить список стран.")
 
     async def show_countries_paginated(self, client: Client, callback_query: CallbackQuery):
         page = int(callback_query.matches[0].group(1))
@@ -82,51 +86,51 @@ class BuyNumberHandlers:
     async def show_services(self, client: Client, callback_query: CallbackQuery, page=0, search_query=None):
         country_id = int(callback_query.matches[0].group(1))
         await callback_query.answer("Загрузка сервисов...")
+        logging.info(f"Запрос сервисов для страны ID: {country_id}")
         try:
-            # Populate service name cache if it's empty
-            if not SERVICE_NAME_CACHE:
-                services_list_data = await self.api.get_services_list()
-                if isinstance(services_list_data, dict) and services_list_data.get('status') == 'success':
-                    for service in services_list_data.get('services', []):
-                        SERVICE_NAME_CACHE[service['code']] = service['name']
-                else:
-                    logging.error(f"Could not fetch service names: {services_list_data}")
-
             # Get prices for the selected country
             if country_id not in SERVICE_PRICE_CACHE:
+                logging.info(f"Цены для страны {country_id} не в кэше, загружаю...")
                 prices_data = await self.api.get_prices(country_id)
                 if isinstance(prices_data, dict):
                     SERVICE_PRICE_CACHE[country_id] = prices_data.get(str(country_id), {})
+                    logging.info(f"Цены для страны {country_id} загружены и кэшированы.")
                 else:
                     raise Exception(f"Unexpected prices format: {prices_data}")
 
             country_prices = SERVICE_PRICE_CACHE[country_id]
+            logging.info(f"Найдено {len(country_prices)} сервисов для страны {country_id}.")
             if not country_prices:
                 await callback_query.message.edit_text("Для этой страны нет доступных сервисов.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад к странам", callback_data="buy_menu")]]))
                 return
 
+            logging.info("Создание кнопок для клавиатуры...")
             buttons = []
 
             services_to_show = country_prices.items()
             if search_query:
                 services_to_show = [
                     (sc, dt) for sc, dt in country_prices.items()
-                    if search_query.lower() in SERVICE_NAME_CACHE.get(sc, sc).lower()
+                    if search_query.lower() in SERVICE_NAME_MAP.get(sc, sc).lower()
                 ]
 
             for service_code, details in services_to_show:
-                # Use the full name from the cache, or default to the code
-                full_name = SERVICE_NAME_CACHE.get(service_code, service_code)
+                # Use the full name from the map, or default to the code
+                full_name = SERVICE_NAME_MAP.get(service_code, service_code)
                 button_text = f"{full_name} - {details['cost']} RUB ({details['count']} шт.)"
                 buttons.append((button_text, f"buy_service:{service_code}:{country_id}"))
 
             keyboard = create_paginated_keyboard(buttons, page, 12, f"buy_service_page:{country_id}", columns=2) # 2 columns
             keyboard.inline_keyboard.append([InlineKeyboardButton("🔎 Поиск", callback_data=f"search_service:{country_id}")])
             keyboard.inline_keyboard.append([InlineKeyboardButton("⬅️ Назад к странам", callback_data="buy_menu")])
-            await callback_query.message.edit_text("Пожалуйста, выберите сервис:", reply_markup=keyboard)
+
+            await callback_query.message.edit_media(
+                media=InputMediaPhoto(media=IMAGE_SERVICES, caption="Пожалуйста, выберите сервис:"),
+                reply_markup=keyboard
+            )
         except Exception as e:
             logging.error(f"Ошибка при отображении сервисов: {e}")
-            await callback_query.message.edit_text("Не удалось загрузить список сервисов.")
+            await callback_query.message.edit_caption("Не удалось загрузить список сервисов.")
 
     async def purchase_number(self, client: Client, callback_query: CallbackQuery):
         service_code = callback_query.matches[0].group(1)

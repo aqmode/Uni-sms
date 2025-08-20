@@ -24,3 +24,11 @@ except ImportError:
     BOT_TOKEN = os.environ.get("BOT_TOKEN")
     SMS_ACTIVATE_API_KEY = os.environ.get("SMS_ACTIVATE_API_KEY")
     ADMIN_ID = os.environ.get("ADMIN_ID")
+
+# --- Image File Paths ---
+# Path to the images that will be used as headers in the bot menus.
+# These files should be in the main project directory.
+IMAGE_MAIN_MENU = "Без названия1_20250819065633.png"
+IMAGE_PROFILE = "Без названия1_20250819065108.png"
+IMAGE_COUNTRIES = "Без названия1_20250819065207.png"
+IMAGE_SERVICES = "Без названия1_20250819065055.png"

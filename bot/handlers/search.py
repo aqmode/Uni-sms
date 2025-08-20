@@ -4,8 +4,8 @@ from pyrogram.types import Message, InlineKeyboardButton
 from pyrogram.handlers import MessageHandler
 from bot.states import get_user_state, clear_user_state
 from bot.utils import create_paginated_keyboard
-# Import caches from buy_number handler (not ideal, but avoids circular handler imports)
-from bot.handlers.buy_number import COUNTRY_LIST_CACHE, SERVICE_PRICE_CACHE, SERVICE_NAME_CACHE
+from bot.handlers.buy_number import COUNTRY_LIST_CACHE, SERVICE_PRICE_CACHE, SERVICE_NAME_MAP
+from config import IMAGE_COUNTRIES, IMAGE_SERVICES
 
 class SearchHandlers:
     def __init__(self):
@@ -14,10 +14,12 @@ class SearchHandlers:
 
     def get_handlers(self):
         return [
-            MessageHandler(self.search_handler, filters.text & ~filters.command),
+            MessageHandler(self.search_handler, filters.text),
         ]
 
     async def search_handler(self, client: Client, message: Message):
+        if message.command:
+            return # Ignore commands
         user_id = message.from_user.id
         user_state = get_user_state(user_id)
 
@@ -45,9 +47,13 @@ class SearchHandlers:
             return
 
         buttons = [(f"{c['rus']}", f"buy_country:{c['id']}") for c in filtered_countries]
-        keyboard = create_paginated_keyboard(buttons, 0, 15, "buy_country_page")
+        keyboard = create_paginated_keyboard(buttons, 0, 18, "buy_country_page", columns=3)
         keyboard.inline_keyboard.append([InlineKeyboardButton("⬅️ Назад к странам", callback_data="buy_menu")])
-        await message.reply_text(f"Результаты поиска по запросу '{query}':", reply_markup=keyboard)
+        await message.reply_photo(
+            photo=IMAGE_COUNTRIES,
+            caption=f"Результаты поиска по запросу '{query}':",
+            reply_markup=keyboard
+        )
 
     async def handle_service_search(self, message: Message, query: str, country_id: int):
         country_prices = SERVICE_PRICE_CACHE.get(country_id, {})
@@ -57,7 +63,7 @@ class SearchHandlers:
 
         filtered_services = [
             (sc, dt) for sc, dt in country_prices.items()
-            if query.lower() in SERVICE_NAME_CACHE.get(sc, sc).lower()
+            if query.lower() in SERVICE_NAME_MAP.get(sc, sc).lower()
         ]
 
         if not filtered_services:
@@ -66,10 +72,14 @@ class SearchHandlers:
 
         buttons = []
         for service_code, details in filtered_services:
-            full_name = SERVICE_NAME_CACHE.get(service_code, service_code)
+            full_name = SERVICE_NAME_MAP.get(service_code, service_code)
             button_text = f"{full_name} - {details['cost']} RUB ({details['count']} шт.)"
             buttons.append((button_text, f"buy_service:{service_code}:{country_id}"))
 
-        keyboard = create_paginated_keyboard(buttons, 0, 15, f"buy_service_page:{country_id}")
+        keyboard = create_paginated_keyboard(buttons, 0, 12, f"buy_service_page:{country_id}", columns=2)
         keyboard.inline_keyboard.append([InlineKeyboardButton("⬅️ Назад к странам", callback_data="buy_menu")])
-        await message.reply_text(f"Результаты поиска по запросу '{query}':", reply_markup=keyboard)
+        await message.reply_photo(
+            photo=IMAGE_SERVICES,
+            caption=f"Результаты поиска по запросу '{query}':",
+            reply_markup=keyboard
+        )

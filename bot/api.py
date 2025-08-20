@@ -10,57 +10,50 @@ class SmsActivateWrapper:
     blocking Pyrogram's asyncio event loop.
     """
     def __init__(self, api_key: str = SMS_ACTIVATE_API_KEY):
-        if not api_key:
-            raise ValueError("SMS_ACTIVATE_API_KEY is not set.")
+        if not api_key or api_key == "YOUR_SMS_ACTIVATE_API_KEY":
+            raise ValueError("SMS_ACTIVATE_API_KEY is not set or is invalid.")
         self.sa = SMSActivateAPI(api_key)
-        # The user's pastebin mentioned .ae, let's try to set it if possible
-        # Looking at the library source is not possible, so I will assume
-        # there might be a way to change the API host.
-        # For now, I'll rely on the library's default.
 
     async def _run_sync(self, func, *args, **kwargs):
         """Runs a synchronous function in an async-friendly way."""
         try:
+            # Use asyncio.to_thread to run the sync function in a separate thread
             return await asyncio.to_thread(func, *args, **kwargs)
         except Exception as e:
             logging.error(f"Error calling SMSActivate library function {func.__name__}: {e}")
-            # Return a dict with an error to be handled by the calling handler
             return {'error': str(e)}
 
+    # Main methods
     async def get_balance(self):
-        # The library method is likely getBalance()
-        # It returns a dict {'access_balance': '123.45'} or similar
         return await self._run_sync(self.sa.getBalance)
 
     async def get_countries(self):
-        # Method is getCountries()
         return await self._run_sync(self.sa.getCountries)
 
-    async def get_prices(self, country_id: int):
-        # Method is getPrices(country=...)
-        return await self._run_sync(self.sa.getPrices, country=country_id)
+    async def get_prices(self, country: int, service: str = None):
+        params = {'country': country}
+        if service:
+            params['service'] = service
+        return await self._run_sync(self.sa.getPrices, **params)
 
-    async def get_services_list(self):
-        # Method is getServicesList()
-        return await self._run_sync(self.sa.getServicesList)
-
-    async def get_top_countries(self):
-        # Method is getTopCountriesByService()
-        return await self._run_sync(self.sa.getTopCountriesByService)
-
-    async def get_number(self, service: str, country_id: int):
-        # Method is getNumber(service=..., country=...)
-        # It returns a dict with activation details
-        return await self._run_sync(self.sa.getNumber, service=service, country=country_id)
+    async def get_number(self, service: str, country: int):
+        return await self._run_sync(self.sa.getNumber, service=service, country=country)
 
     async def get_status(self, activation_id: int):
-        # Method is getStatus(id=...)
-        # Returns a string like "STATUS_OK:12345"
         return await self._run_sync(self.sa.getStatus, id=activation_id)
 
     async def set_status(self, activation_id: int, status: int):
-        # Method is setStatus(id=..., status=...)
         return await self._run_sync(self.sa.setStatus, id=activation_id, status=status)
 
-    # I will omit the rent methods for now to simplify the refactoring
-    # and ensure the core functionality works first. I will add them back later.
+    # Rent methods
+    async def get_rent_services_and_countries(self):
+        return await self._run_sync(self.sa.getRentServicesAndCountries)
+
+    async def get_rent_number(self, service: str, country: int, rent_time: int):
+        return await self._run_sync(self.sa.getRentNumber, service=service, country=country, time=rent_time)
+
+    async def get_rent_status(self, rent_id: int):
+        return await self._run_sync(self.sa.getRentStatus, id=rent_id)
+
+    async def set_rent_status(self, rent_id: int, status: int):
+        return await self._run_sync(self.sa.setRentStatus, id=rent_id, status=status)

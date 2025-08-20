@@ -1,8 +1,9 @@
 from pyrogram import Client, filters
-from pyrogram.types import Message, CallbackQuery
+from pyrogram.types import Message, CallbackQuery, InputMediaPhoto
 from pyrogram.handlers import MessageHandler, CallbackQueryHandler
 from bot.keyboards.inline import main_menu_keyboard, account_menu_keyboard
 from bot.db import Database
+from config import IMAGE_MAIN_MENU, IMAGE_PROFILE
 
 class StartHandlers:
     def __init__(self, db: Database):
@@ -36,20 +37,27 @@ class StartHandlers:
             "Ваш универсальный бот для работы с виртуальными номерами. "
             "Используйте меню для навигации."
         )
-        await message.reply_text(welcome_text, reply_markup=main_menu_keyboard())
+        # Send the main menu with a photo
+        await message.reply_photo(
+            photo=IMAGE_MAIN_MENU,
+            caption=welcome_text,
+            reply_markup=main_menu_keyboard()
+        )
 
     async def main_menu_callback_handler(self, client: Client, callback_query: CallbackQuery):
         """Handles the 'Back to Main Menu' button."""
         await callback_query.answer()
-        await callback_query.message.edit_text(
-            "Главное меню:",
+        # Edit the media to show the main menu photo and caption
+        await callback_query.message.edit_media(
+            media=InputMediaPhoto(media=IMAGE_MAIN_MENU, caption="Главное меню:"),
             reply_markup=main_menu_keyboard()
         )
 
     async def account_menu_callback_handler(self, client: Client, callback_query: CallbackQuery):
         """Handles the 'My Account' button."""
         await callback_query.answer()
-        await callback_query.message.edit_text(
-            "Личный кабинет:",
+        # Edit the media to show the profile photo and caption
+        await callback_query.message.edit_media(
+            media=InputMediaPhoto(media=IMAGE_PROFILE, caption="Личный кабинет:"),
             reply_markup=account_menu_keyboard()
         )

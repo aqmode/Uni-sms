@@ -1,0 +1,1 @@
+This file marks the completion of the final UI/UX refactoring and migration to the official sms-activate library.
