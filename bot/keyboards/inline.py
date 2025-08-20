@@ -1,4 +1,4 @@
-from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 def main_menu_keyboard():
     """
@@ -6,16 +6,17 @@ def main_menu_keyboard():
     """
     keyboard = [
         [
-            InlineKeyboardButton("🛒 Купить номер", callback_data="buy_menu"),
+            InlineKeyboardButton(text="🛒 Купить номер", callback_data="buy_menu"),
         ],
         [
-            InlineKeyboardButton("👤 Мой кабинет", callback_data="account_menu"),
+            InlineKeyboardButton(text="👤 Мой кабинет", callback_data="account_menu"),
         ],
-        [
-            InlineKeyboardButton("💬 Техподдержка", callback_data="support"),
-        ]
+        # Support feature is disabled for now
+        # [
+        #     InlineKeyboardButton(text="💬 Техподдержка", callback_data="support"),
+        # ]
     ]
-    return InlineKeyboardMarkup(keyboard)
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 def account_menu_keyboard():
     """
@@ -23,14 +24,14 @@ def account_menu_keyboard():
     """
     keyboard = [
         [
-            InlineKeyboardButton("💰 Баланс", callback_data="check_balance"),
-            InlineKeyboardButton("➕ Пополнить", callback_data="top_up_balance"),
+            InlineKeyboardButton(text="💰 Баланс", callback_data="check_balance"),
+            InlineKeyboardButton(text="➕ Пополнить", callback_data="top_up_balance"),
         ],
         [
-            InlineKeyboardButton("📚 История операций", callback_data="history_menu"),
+            InlineKeyboardButton(text="📚 История операций", callback_data="history_menu"),
         ],
         [
-            InlineKeyboardButton("⬅️ Назад в главное меню", callback_data="main_menu"),
+            InlineKeyboardButton(text="⬅️ Назад в главное меню", callback_data="main_menu"),
         ]
     ]
-    return InlineKeyboardMarkup(keyboard)
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)

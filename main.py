@@ -1,74 +1,59 @@
-# Этот файл является главной точкой входа для запуска Telegram-бота.
-# Он инициализирует клиент бота, регистрирует все обработчики команд
-# и запускает бота в режим постоянной работы.
-
 import logging
 import sys
-from pyrogram import Client
+from aiogram import Bot, Dispatcher, executor, types
 
-# Импортируем переменные настроек и проверяем их наличие до всего остального
+# Import config and perform startup check
 try:
-    from config import BOT_TOKEN, ADMIN_ID, API_ID, API_HASH, SMS_ACTIVATE_API_KEY
-    if not all([BOT_TOKEN, ADMIN_ID, API_ID, API_HASH, SMS_ACTIVATE_API_KEY]):
+    from config import BOT_TOKEN, ADMIN_ID
+    if not all([BOT_TOKEN, ADMIN_ID]):
         raise ImportError
 except ImportError:
     print("!!! ОШИБКА: НЕОБХОДИМА НАСТРОЙКА !!!")
     print("Пожалуйста, выполните следующие шаги:")
     print("1. Скопируйте файл `settings.py.example` и переименуйте его в `settings.py`.")
-    print("2. Откройте `settings.py` и впишите ваши данные (API_ID, API_HASH, BOT_TOKEN и т.д.).")
+    print("2. Откройте `settings.py` и впишите ваши данные.")
     print("3. Сохраните файл и запустите бота снова.")
     sys.exit("Бот не может быть запущен без полной конфигурации.")
 
-# Импортируем остальные компоненты
+# Import other components
 from bot.api import SmsActivateWrapper
 from bot.db import Database
-from bot.handlers.start import StartHandlers
-from bot.handlers.balance import BalanceHandlers
-from bot.handlers.buy_number import BuyNumberHandlers
-from bot.handlers.history import HistoryHandlers
-from bot.handlers.billing import BillingHandlers
-from bot.handlers.admin import AdminHandlers
-from bot.handlers.search import SearchHandlers
+from bot.handlers.start import register_start_handlers
+from bot.handlers.balance import register_balance_handlers
+from bot.handlers.buy_number import register_buy_handlers
+from bot.handlers.history import register_history_handlers
+from bot.handlers.billing import register_billing_handlers
+from bot.handlers.admin import register_admin_handlers
+from bot.handlers.search import register_search_handlers
 
+# Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
-class UniSMSBot(Client):
-    def __init__(self):
-        super().__init__(
-            "uni_sms_bot",
-            api_id=API_ID,
-            api_hash=API_HASH,
-            bot_token=BOT_TOKEN
-        )
-        self.db = Database()
-        self.api = SmsActivateWrapper() # Используем новый API
+# Initialize bot and dispatcher
+bot = Bot(token=BOT_TOKEN, parse_mode=types.ParseMode.MARKDOWN)
+dp = Dispatcher(bot)
 
-    def register_handlers(self):
-        """Registers all handlers for the bot."""
-        handler_classes = [
-            StartHandlers(self.db),
-            BalanceHandlers(self.db, self.api),
-            BuyNumberHandlers(self.db, self.api),
-            HistoryHandlers(self.db),
-            BillingHandlers(),
-            AdminHandlers(self.db),
-            SearchHandlers(),
-        ]
+# Initialize API and DB
+db = Database()
+api = SmsActivateWrapper()
 
-        for handler_class in handler_classes:
-            for handler in handler_class.get_handlers():
-                self.add_handler(handler)
+def register_all_handlers(dispatcher: Dispatcher):
+    """Registers all handlers for the bot."""
+    register_start_handlers(dispatcher, db)
+    register_balance_handlers(dispatcher, db, api)
+    register_buy_handlers(dispatcher, db, api)
+    register_history_handlers(dispatcher, db)
+    register_billing_handlers(dispatcher)
+    register_admin_handlers(dispatcher, db)
+    register_search_handlers(dispatcher)
 
-        logging.info("Обработчики успешно зарегистрированы.")
-
-    def run(self):
-        """Runs the bot by registering handlers and then starting the client."""
-        logging.info("Регистрация обработчиков...")
-        self.register_handlers()
-        logging.info("Запуск бота...")
-        super().run()
+    logging.info("Все обработчики успешно зарегистрированы.")
 
 
-if __name__ == "__main__":
-    bot = UniSMSBot()
-    bot.run()
+async def on_startup(dispatcher):
+    logging.info("Регистрация обработчиков...")
+    register_all_handlers(dispatcher)
+    logging.info("Запуск бота...")
+
+if __name__ == '__main__':
+    executor.start_polling(dp, skip_updates=True, on_startup=on_startup)

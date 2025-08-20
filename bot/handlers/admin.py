@@ -1,78 +1,85 @@
 import logging
-from pyrogram import Client, filters
-from pyrogram.types import Message
-from pyrogram.handlers import MessageHandler
+from aiogram import Dispatcher, types
 from bot.db import Database
 from config import ADMIN_ID
 
-class AdminHandlers:
-    def __init__(self, db: Database):
-        self.db = db
-        self.admin_id = int(ADMIN_ID)
+# We need to define a filter for the admin
+class AdminFilter(types.BoundFilter):
+    key = 'is_admin'
 
-    def get_handlers(self):
-        return [
-            MessageHandler(self.credit_handler, filters.command("credit") & filters.user(self.admin_id)),
-            MessageHandler(self.check_balance_handler, filters.command("user_balance") & filters.user(self.admin_id)),
-        ]
+    def __init__(self, is_admin: bool):
+        self.is_admin = is_admin
 
-    async def check_balance_handler(self, client: Client, message: Message):
-        """
-        Проверяет баланс указанного пользователя.
-        Использование: /user_balance <user_telegram_id>
-        """
-        try:
-            _, user_id_str = message.text.split()
-            user_id = int(user_id_str)
+    async def check(self, message: types.Message):
+        return message.from_user.id == int(ADMIN_ID)
 
-            balance_kopecks = self.db.get_user_balance(user_id)
-            balance_rub = balance_kopecks / 100.0
+async def credit_handler(message: types.Message, db: Database):
+    """
+    Manually credits a user's account.
+    Usage: /credit <user_telegram_id> <amount_in_rub>
+    """
+    try:
+        args = message.get_args().split()
+        if len(args) != 2:
+            raise ValueError("Invalid number of arguments")
 
-            await message.reply_text(f"Баланс пользователя `{user_id}`: **{balance_rub:.2f} RUB**.")
+        user_id = int(args[0])
+        amount_rub = float(args[1])
+        amount_kopecks = int(amount_rub * 100)
 
-        except ValueError:
-            await message.reply_text("Неверный формат. Используйте: `/user_balance <user_id>`")
-        except Exception as e:
-            logging.error(f"Ошибка в команде /user_balance: {e}")
-            await message.reply_text(f"Произошла ошибка: {e}")
+        if amount_kopecks <= 0:
+            await message.answer("Сумма должна быть положительной.")
+            return
 
-    async def credit_handler(self, client: Client, message: Message):
-        """
-        Пополняет счет пользователя вручную.
-        Использование: /credit <user_telegram_id> <сумма_в_рублях>
-        Пример: /credit 123456789 500.50
-        """
-        try:
-            _, user_id_str, amount_str = message.text.split()
-            user_id = int(user_id_str)
-            amount_rub = float(amount_str)
-            amount_kopecks = int(amount_rub * 100)
+        success = db.create_transaction(
+            user_telegram_id=user_id,
+            amount=amount_kopecks,
+            type='deposit',
+            details=f"Ручное пополнение администратором {ADMIN_ID}"
+        )
 
-            if amount_kopecks <= 0:
-                await message.reply_text("Сумма должна быть положительной.")
-                return
+        if success:
+            await message.answer(f"Баланс пользователя {user_id} успешно пополнен на {amount_rub:.2f} RUB.")
+            try:
+                # Using message.bot to send message to another user
+                await message.bot.send_message(
+                    user_id,
+                    f"Ваш баланс был пополнен на **{amount_rub:.2f} RUB**."
+                )
+            except Exception as e:
+                await message.answer(f"Не удалось уведомить пользователя {user_id} (возможно, он заблокировал бота). Ошибка: {e}")
+        else:
+            await message.answer(f"Не удалось пополнить баланс пользователя {user_id}. Проверьте логи.")
 
-            success = self.db.create_transaction(
-                user_telegram_id=user_id,
-                amount=amount_kopecks,
-                type='deposit',
-                details=f"Ручное пополнение администратором {self.admin_id}"
-            )
+    except (ValueError, IndexError):
+        await message.answer("Неверный формат. Используйте: `/credit <user_id> <сумма>`")
+    except Exception as e:
+        logging.error(f"Ошибка в команде /credit: {e}")
+        await message.answer(f"Произошла ошибка: {e}")
 
-            if success:
-                await message.reply_text(f"Баланс пользователя {user_id} успешно пополнен на {amount_rub:.2f} RUB.")
-                try:
-                    await client.send_message(
-                        user_id,
-                        f"Ваш баланс был пополнен на **{amount_rub:.2f} RUB**."
-                    )
-                except Exception as e:
-                    await message.reply_text(f"Не удалось уведомить пользователя {user_id} (возможно, он заблокировал бота). Ошибка: {e}")
-            else:
-                await message.reply_text(f"Не удалось пополнить баланс пользователя {user_id}. Проверьте логи.")
+async def check_balance_handler(message: types.Message, db: Database):
+    """
+    Checks the balance of a specific user.
+    Usage: /user_balance <user_telegram_id>
+    """
+    try:
+        args = message.get_args().split()
+        if len(args) != 1:
+            raise ValueError("Invalid number of arguments")
 
-        except ValueError:
-            await message.reply_text("Неверный формат. Используйте: `/credit <user_id> <сумма>`")
-        except Exception as e:
-            logging.error(f"Ошибка в команде /credit: {e}")
-            await message.reply_text(f"Произошла ошибка: {e}")
+        user_id = int(args[0])
+        balance_kopecks = db.get_user_balance(user_id)
+        balance_rub = balance_kopecks / 100.0
+
+        await message.answer(f"Баланс пользователя `{user_id}`: **{balance_rub:.2f} RUB**.")
+
+    except (ValueError, IndexError):
+        await message.answer("Неверный формат. Используйте: `/user_balance <user_id>`")
+    except Exception as e:
+        logging.error(f"Ошибка в команде /user_balance: {e}")
+        await message.answer(f"Произошла ошибка: {e}")
+
+def register_admin_handlers(dp: Dispatcher, db: Database):
+    dp.filters_factory.bind(AdminFilter)
+    dp.register_message_handler(credit_handler, commands=['credit'], is_admin=True, state="*")
+    dp.register_message_handler(check_balance_handler, commands=['user_balance'], is_admin=True, state="*")

@@ -1,4 +1,4 @@
-from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 def create_paginated_keyboard(buttons, page, page_size, callback_prefix, columns=2):
     """
@@ -14,17 +14,16 @@ def create_paginated_keyboard(buttons, page, page_size, callback_prefix, columns
     start = page * page_size
     end = start + page_size
 
-    # Group buttons into rows based on the number of columns
-    keyboard_buttons = [InlineKeyboardButton(text, callback_data=data) for text, data in buttons[start:end]]
+    keyboard_buttons = [InlineKeyboardButton(text=text, callback_data=data) for text, data in buttons[start:end]]
     keyboard = [keyboard_buttons[i:i + columns] for i in range(0, len(keyboard_buttons), columns)]
 
     nav_buttons = []
     if page > 0:
-        nav_buttons.append(InlineKeyboardButton("⬅️ Back", callback_data=f"{callback_prefix}:{page-1}"))
+        nav_buttons.append(InlineKeyboardButton(text="⬅️ Назад", callback_data=f"{callback_prefix}:{page-1}"))
     if end < len(buttons):
-        nav_buttons.append(InlineKeyboardButton("Next ➡️", callback_data=f"{callback_prefix}:{page+1}"))
+        nav_buttons.append(InlineKeyboardButton(text="Вперед ➡️", callback_data=f"{callback_prefix}:{page+1}"))
 
     if nav_buttons:
         keyboard.append(nav_buttons)
 
-    return InlineKeyboardMarkup(keyboard)
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)

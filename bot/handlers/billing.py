@@ -1,28 +1,19 @@
 import logging
-from pyrogram import Client, filters
-from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
-from pyrogram.handlers import CallbackQueryHandler
+from aiogram import Dispatcher, types
+from aiogram.dispatcher.filters import Text
+from bot.keyboards.inline import account_menu_keyboard
 
-class BillingHandlers:
-    def __init__(self):
-        pass
+async def top_up_balance_handler(callback_query: types.CallbackQuery):
+    await callback_query.answer()
 
-    def get_handlers(self):
-        return [
-            CallbackQueryHandler(self.top_up_balance_handler, filters.regex("^top_up_balance$")),
-        ]
+    text = (
+        "**Пополнение баланса**\n\n"
+        "Для пополнения баланса, пожалуйста, свяжитесь с администратором через техподдержку.\n\n"
+        "В будущем здесь будет интеграция с платежной системой."
+    )
 
-    async def top_up_balance_handler(self, client: Client, callback_query: CallbackQuery):
-        await callback_query.answer()
+    # In aiogram, we need to answer the callback query before editing
+    await callback_query.message.edit_text(text, reply_markup=account_menu_keyboard())
 
-        text = (
-            "**Пополнение баланса**\n\n"
-            "Для пополнения баланса, пожалуйста, свяжитесь с администратором через техподдержку.\n\n"
-            "В будущем здесь будет интеграция с платежной системой."
-        )
-
-        keyboard = InlineKeyboardMarkup([[
-            InlineKeyboardButton("⬅️ Назад в личный кабинет", callback_data="account_menu")
-        ]])
-
-        await callback_query.message.edit_text(text, reply_markup=keyboard)
+def register_billing_handlers(dp: Dispatcher):
+    dp.register_callback_query_handler(top_up_balance_handler, Text(equals="top_up_balance"))
