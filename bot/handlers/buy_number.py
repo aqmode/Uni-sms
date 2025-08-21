@@ -1,12 +1,12 @@
 import asyncio
 import logging
-from aiogram import Dispatcher, types
-from aiogram.dispatcher.filters import Text
+from aiogram import F, Router, types
 from bot.api import SmsActivateWrapper
 from bot.db import Database
 from bot.utils import create_paginated_keyboard
-from bot.states import set_user_state, clear_user_state
 from config import IMAGE_COUNTRIES, IMAGE_SERVICES
+
+router = Router()
 
 # Caches
 COUNTRY_LIST_CACHE = []
@@ -21,6 +21,7 @@ SERVICE_NAME_MAP = {
 
 # --- Handlers ---
 
+@router.callback_query(F.data == "buy_menu")
 async def show_countries(callback_query: types.CallbackQuery, api: SmsActivateWrapper, page: int = 0):
     await callback_query.answer("Загрузка стран...")
     try:
@@ -44,12 +45,19 @@ async def show_countries(callback_query: types.CallbackQuery, api: SmsActivateWr
         )
     except Exception as e:
         logging.error(f"Ошибка при отображении стран: {e}")
-        await callback_query.message.edit_caption("Не удалось загрузить список стран.")
+        # Reverted to edit_caption as the original media might not be editable to text
+        await callback_query.message.edit_caption(caption="Не удалось загрузить список стран.", reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="⬅️ Назад", callback_data="main_menu")]]))
 
+
+@router.callback_query(F.data.startswith("buy_country_page:"))
 async def show_countries_paginated(callback_query: types.CallbackQuery, api: SmsActivateWrapper):
     page = int(callback_query.data.split(':')[-1])
+    # Re-using the show_countries logic for pagination
+    # This requires show_countries to handle being called from a paginated button
     await show_countries(callback_query, api, page=page)
 
+
+@router.callback_query(F.data.startswith("buy_country:"))
 async def show_services(callback_query: types.CallbackQuery, api: SmsActivateWrapper, page: int = 0):
     country_id = int(callback_query.data.split(':')[-1])
     await callback_query.answer("Загрузка сервисов...")
@@ -63,7 +71,7 @@ async def show_services(callback_query: types.CallbackQuery, api: SmsActivateWra
 
         country_prices = SERVICE_PRICE_CACHE[country_id]
         if not country_prices:
-            await callback_query.message.edit_text("Для этой страны нет доступных сервисов.")
+            await callback_query.message.edit_text("Для этой страны нет доступных сервисов.", reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="⬅️ Назад к странам", callback_data="buy_menu")]]))
             return
 
         buttons = []
@@ -81,8 +89,10 @@ async def show_services(callback_query: types.CallbackQuery, api: SmsActivateWra
         )
     except Exception as e:
         logging.error(f"Ошибка при отображении сервисов: {e}")
-        await callback_query.message.edit_caption("Не удалось загрузить список сервисов.")
+        await callback_query.message.edit_caption(caption="Не удалось загрузить список сервисов.", reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="⬅️ Назад к странам", callback_data="buy_menu")]]))
 
+
+@router.callback_query(F.data.startswith("buy_service:"))
 async def purchase_number(callback_query: types.CallbackQuery, db: Database, api: SmsActivateWrapper):
     _, service_code, country_id_str = callback_query.data.split(':')
     country_id = int(country_id_str)
@@ -115,6 +125,7 @@ async def purchase_number(callback_query: types.CallbackQuery, db: Database, api
         db.create_transaction(user_id, cost_kopecks, 'refund', f"Возврат из-за ошибки: {e}")
         await callback_query.message.edit_caption("Произошла непредвиденная ошибка. Средства возвращены.")
 
+
 async def poll_for_sms(message: types.Message, activation_id: int, api: SmsActivateWrapper):
     for _ in range(60): # Poll for 10 minutes (60 * 10 seconds)
         await asyncio.sleep(10)
@@ -132,12 +143,3 @@ async def poll_for_sms(message: types.Message, activation_id: int, api: SmsActiv
             logging.error(f"Ошибка при проверке СМС (ID: {activation_id}): {e}")
     await message.answer("Ожидание СМС завершено (10 минут).")
     await api.set_status(activation_id, 8)
-
-# --- Registration ---
-
-def register_buy_handlers(dp: Dispatcher, db: Database, api: SmsActivateWrapper):
-    dp.register_callback_query_handler(lambda c: show_countries(c, api), Text(equals="buy_menu"))
-    dp.register_callback_query_handler(lambda c: show_countries_paginated(c, api), Text(startswith="buy_country_page:"))
-    dp.register_callback_query_handler(lambda c: show_services(c, api), Text(startswith="buy_country:"))
-    # Need handlers for service pagination and search triggers
-    dp.register_callback_query_handler(lambda c: purchase_number(c, db, api), Text(startswith="buy_service:"))

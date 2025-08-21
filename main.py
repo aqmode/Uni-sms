@@ -1,6 +1,10 @@
+import asyncio
 import logging
 import sys
-from aiogram import Bot, Dispatcher, executor, types
+from typing import Any, Awaitable, Callable, Dict
+
+from aiogram import Bot, Dispatcher, types
+from aiogram.enums import ParseMode
 
 # Import config and perform startup check
 try:
@@ -18,42 +22,58 @@ except ImportError:
 # Import other components
 from bot.api import SmsActivateWrapper
 from bot.db import Database
-from bot.handlers.start import register_start_handlers
-from bot.handlers.balance import register_balance_handlers
-from bot.handlers.buy_number import register_buy_handlers
-from bot.handlers.history import register_history_handlers
-from bot.handlers.billing import register_billing_handlers
-from bot.handlers.admin import register_admin_handlers
-from bot.handlers.search import register_search_handlers
+from bot.handlers import all_routers  # We will create this combined router in a later step
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# Middleware for dependency injection
+class DependencyMiddleware:
+    def __init__(self, db: Database, api: SmsActivateWrapper):
+        self.db = db
+        self.api = api
 
-# Initialize bot and dispatcher
-bot = Bot(token=BOT_TOKEN, parse_mode=types.ParseMode.MARKDOWN)
-dp = Dispatcher(bot)
+    async def __call__(
+        self,
+        handler: Callable[[types.TelegramObject, Dict[str, Any]], Awaitable[Any]],
+        event: types.TelegramObject,
+        data: Dict[str, Any],
+    ) -> Any:
+        # Pass db and api instances to the handler data
+        data["db"] = self.db
+        data["api"] = self.api
+        return await handler(event, data)
 
-# Initialize API and DB
-db = Database()
-api = SmsActivateWrapper()
 
-def register_all_handlers(dispatcher: Dispatcher):
-    """Registers all handlers for the bot."""
-    register_start_handlers(dispatcher, db)
-    register_balance_handlers(dispatcher, db, api)
-    register_buy_handlers(dispatcher, db, api)
-    register_history_handlers(dispatcher, db)
-    register_billing_handlers(dispatcher)
-    register_admin_handlers(dispatcher, db)
-    register_search_handlers(dispatcher)
+async def main() -> None:
+    """Initializes and starts the bot."""
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+
+    # Initialize Bot instance with a default parse mode which will be passed to all API calls
+    bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.MARKDOWN)
+
+    # Initialize Dispatcher
+    dp = Dispatcher()
+
+    # Initialize API and DB
+    db = Database()
+    api = SmsActivateWrapper()
+
+    # Register middleware for dependency injection
+    dp.update.middleware(DependencyMiddleware(db=db, api=api))
+
+    # Include all routers from the handlers package
+    dp.include_router(all_routers)
 
     logging.info("Все обработчики успешно зарегистрированы.")
-
-
-async def on_startup(dispatcher):
-    logging.info("Регистрация обработчиков...")
-    register_all_handlers(dispatcher)
     logging.info("Запуск бота...")
+    # Start polling
+    await dp.start_polling(bot)
 
-if __name__ == '__main__':
-    executor.start_polling(dp, skip_updates=True, on_startup=on_startup)
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        logging.info("Бот остановлен.")

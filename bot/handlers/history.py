@@ -1,9 +1,11 @@
 import logging
-from aiogram import Dispatcher, types
-from aiogram.dispatcher.filters import Text
+from aiogram import F, Router, types
 from bot.db import Database
 from bot.keyboards.inline import account_menu_keyboard
 
+router = Router()
+
+@router.callback_query(F.data == "history_menu")
 async def history_menu_handler(callback_query: types.CallbackQuery, db: Database):
     user_id = callback_query.from_user.id
     await callback_query.answer("Загружаю историю...")
@@ -30,20 +32,15 @@ async def history_menu_handler(callback_query: types.CallbackQuery, db: Database
             #     for r in rental_history[:5]:
             #         history_text += f"- Сервис: {r[0]}, Номер: `{r[1]}` до {r[2]}\n"
 
+        # The original keyboard was created manually, let's keep it that way for consistency
+        # but account_menu_keyboard() seems more appropriate if it leads back to the account menu.
+        # Let's use the dedicated back button as in the original code.
         keyboard = types.InlineKeyboardMarkup(inline_keyboard=[[
             types.InlineKeyboardButton(text="⬅️ Назад в личный кабинет", callback_data="account_menu")
         ]])
 
-        # In aiogram, we need to answer the callback query before editing
         await callback_query.message.edit_text(history_text, reply_markup=keyboard)
 
     except Exception as e:
         logging.error(f"Ошибка при получении истории для пользователя {user_id}: {e}")
         await callback_query.message.edit_text("Не удалось получить вашу историю. Попробуйте снова.")
-
-def register_history_handlers(dp: Dispatcher, db: Database):
-    # We need to pass the db instance to the handler. We can do this with a lambda.
-    dp.register_callback_query_handler(
-        lambda c: history_menu_handler(c, db),
-        Text(equals="history_menu")
-    )

@@ -1,9 +1,15 @@
 import logging
-from aiogram import Dispatcher, types
-from aiogram.dispatcher.filters import Text
+from aiogram import F, Router, types
 from bot.keyboards.inline import account_menu_keyboard
 
+router = Router()
+
+@router.callback_query(F.data == "top_up_balance")
 async def top_up_balance_handler(callback_query: types.CallbackQuery):
+    """
+    Handles the 'Top Up Balance' button.
+    Currently, this is a placeholder.
+    """
     await callback_query.answer()
 
     text = (
@@ -12,8 +18,5 @@ async def top_up_balance_handler(callback_query: types.CallbackQuery):
         "В будущем здесь будет интеграция с платежной системой."
     )
 
-    # In aiogram, we need to answer the callback query before editing
+    # In aiogram, we need to answer the callback query before sending a new message or editing.
     await callback_query.message.edit_text(text, reply_markup=account_menu_keyboard())
-
-def register_billing_handlers(dp: Dispatcher):
-    dp.register_callback_query_handler(top_up_balance_handler, Text(equals="top_up_balance"))
