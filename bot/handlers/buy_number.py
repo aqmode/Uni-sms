@@ -1,6 +1,8 @@
 import asyncio
 import logging
 from aiogram import F, Router, types
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.types import FSInputFile
 from bot.api import SmsActivateWrapper
 from bot.db import Database
 from bot.utils import create_paginated_keyboard
@@ -27,26 +29,40 @@ async def show_countries(callback_query: types.CallbackQuery, api: SmsActivateWr
     try:
         if not COUNTRY_LIST_CACHE:
             countries_data = await api.get_countries()
-            if isinstance(countries_data, dict):
-                all_countries = list(countries_data.values())
-                all_countries.sort(key=lambda c: c['rus'])
-                COUNTRY_LIST_CACHE.extend(all_countries)
-            else:
-                raise Exception(f"Invalid country data: {countries_data}")
 
-        buttons = [(f"{c['rus']}", f"buy_country:{c['id']}") for c in COUNTRY_LIST_CACHE]
+            # Robust check for API errors and data structure
+            if isinstance(countries_data, dict) and 'error' in countries_data:
+                raise Exception(f"API Error getting countries: {countries_data['error']}")
+            if not isinstance(countries_data, dict):
+                raise Exception(f"Invalid country data type: {type(countries_data)}")
+
+            all_countries = list(countries_data.values())
+            if not all_countries or not isinstance(all_countries[0], dict):
+                raise Exception(f"Unexpected country data format: {all_countries}")
+
+            all_countries.sort(key=lambda c: c.get('rus', ''))
+            COUNTRY_LIST_CACHE.extend(all_countries)
+
+        # Use .get() for safe access
+        buttons = [(f"{c.get('rus', 'N/A')}", f"buy_country:{c.get('id', 'N/A')}") for c in COUNTRY_LIST_CACHE]
         keyboard = create_paginated_keyboard(buttons, page, 18, "buy_country_page", columns=3)
-        keyboard.add(types.InlineKeyboardButton(text="🔎 Поиск", callback_data="search_country"))
-        keyboard.add(types.InlineKeyboardButton(text="⬅️ Назад в главное меню", callback_data="main_menu"))
+        keyboard.inline_keyboard.append([types.InlineKeyboardButton(text="🔎 Поиск", callback_data="search_country")])
+        keyboard.inline_keyboard.append([types.InlineKeyboardButton(text="⬅️ Назад в главное меню", callback_data="main_menu")])
 
-        await callback_query.message.edit_media(
-            media=types.InputMediaPhoto(media=IMAGE_COUNTRIES, caption="Пожалуйста, выберите страну:"),
-            reply_markup=keyboard
-        )
+        try:
+            await callback_query.message.edit_media(
+                media=types.InputMediaPhoto(media=FSInputFile(IMAGE_COUNTRIES), caption="Пожалуйста, выберите страну:"),
+                reply_markup=keyboard
+            )
+        except TelegramBadRequest:
+            pass # Ignore "message is not modified" error
     except Exception as e:
         logging.error(f"Ошибка при отображении стран: {e}")
-        # Reverted to edit_caption as the original media might not be editable to text
-        await callback_query.message.edit_caption(caption="Не удалось загрузить список стран.", reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="⬅️ Назад", callback_data="main_menu")]]))
+        try:
+            # Reverted to edit_caption as the original media might not be editable to text
+            await callback_query.message.edit_caption(caption="Не удалось загрузить список стран.", reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="⬅️ Назад", callback_data="main_menu")]]))
+        except TelegramBadRequest:
+            pass
 
 
 @router.callback_query(F.data.startswith("buy_country_page:"))
@@ -80,16 +96,22 @@ async def show_services(callback_query: types.CallbackQuery, api: SmsActivateWra
             buttons.append((f"{name} - {details['cost']} RUB", f"buy_service:{code}:{country_id}"))
 
         keyboard = create_paginated_keyboard(buttons, page, 12, f"buy_service_page:{country_id}", columns=2)
-        keyboard.add(types.InlineKeyboardButton(text="🔎 Поиск", callback_data=f"search_service:{country_id}"))
-        keyboard.add(types.InlineKeyboardButton(text="⬅️ Назад к странам", callback_data="buy_menu"))
+        keyboard.inline_keyboard.append([types.InlineKeyboardButton(text="🔎 Поиск", callback_data=f"search_service:{country_id}")])
+        keyboard.inline_keyboard.append([types.InlineKeyboardButton(text="⬅️ Назад к странам", callback_data="buy_menu")])
 
-        await callback_query.message.edit_media(
-            media=types.InputMediaPhoto(media=IMAGE_SERVICES, caption="Пожалуйста, выберите сервис:"),
-            reply_markup=keyboard
-        )
+        try:
+            await callback_query.message.edit_media(
+                media=types.InputMediaPhoto(media=FSInputFile(IMAGE_SERVICES), caption="Пожалуйста, выберите сервис:"),
+                reply_markup=keyboard
+            )
+        except TelegramBadRequest:
+            pass # Ignore "message is not modified" error
     except Exception as e:
         logging.error(f"Ошибка при отображении сервисов: {e}")
-        await callback_query.message.edit_caption(caption="Не удалось загрузить список сервисов.", reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="⬅️ Назад к странам", callback_data="buy_menu")]]))
+        try:
+            await callback_query.message.edit_caption(caption="Не удалось загрузить список сервисов.", reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text="⬅️ Назад к странам", callback_data="buy_menu")]]))
+        except TelegramBadRequest:
+            pass
 
 
 @router.callback_query(F.data.startswith("buy_service:"))
@@ -98,17 +120,33 @@ async def purchase_number(callback_query: types.CallbackQuery, db: Database, api
     country_id = int(country_id_str)
     user_id = callback_query.from_user.id
 
-    await callback_query.message.edit_caption("⏳ Обработка покупки...")
+    # Define a simple keyboard to allow navigation back to the service list
+    back_to_services_kb = types.InlineKeyboardMarkup(inline_keyboard=[
+        [types.InlineKeyboardButton(text="⬅️ Назад к сервисам", callback_data=f"buy_country:{country_id}")]
+    ])
+
+    try:
+        # Edit caption but keep a simple keyboard so the user is not stuck
+        await callback_query.message.edit_caption("⏳ Обработка покупки...", reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[]))
+    except TelegramBadRequest:
+        return  # Ignore if message is not modified, but stop the handler to prevent re-purchase
+
     try:
         cost_rub = float(SERVICE_PRICE_CACHE[country_id][service_code]['cost'])
         cost_kopecks = int(cost_rub * 100)
     except Exception as e:
         logging.error(f"Не удалось определить стоимость: {e}")
-        await callback_query.message.edit_caption("Ошибка при проверке цены.")
+        try:
+            await callback_query.message.edit_caption("Ошибка при проверке цены.", reply_markup=back_to_services_kb)
+        except TelegramBadRequest:
+            pass
         return
 
     if not db.create_transaction(user_id, -cost_kopecks, 'purchase', f"Покупка {service_code}"):
-        await callback_query.message.edit_caption("❌ Покупка не удалась! Недостаточно средств.")
+        try:
+            await callback_query.message.edit_caption("❌ Покупка не удалась! Недостаточно средств.", reply_markup=back_to_services_kb)
+        except TelegramBadRequest:
+            pass
         return
 
     try:
@@ -116,14 +154,33 @@ async def purchase_number(callback_query: types.CallbackQuery, db: Database, api
         if isinstance(purchase_response, dict) and 'activation' in purchase_response:
             act = purchase_response['activation']
             db.log_purchase(user_id, int(act['id']), service_code, str(country_id), act['phone'])
-            await callback_query.message.edit_caption(f"✅ **Номер получен!**\n\n**Номер:** `{act['phone']}`\n\nОжидаю СМС...")
+            try:
+                # On success, we remove the keyboard as the purchase is complete for this message
+                await callback_query.message.edit_caption(
+                    f"✅ **Номер получен!**\n\n**Номер:** `{act['phone']}`\n\nОжидаю СМС...",
+                    reply_markup=None
+                )
+            except TelegramBadRequest:
+                pass
             asyncio.create_task(poll_for_sms(callback_query.message, int(act['id']), api))
         else:
             db.create_transaction(user_id, cost_kopecks, 'refund', f"Возврат: {purchase_response}")
-            await callback_query.message.edit_caption(f"❌ **Ошибка покупки!**\nПричина: `{purchase_response}`. Средства возвращены.")
+            try:
+                await callback_query.message.edit_caption(
+                    f"❌ **Ошибка покупки!**\nПричина: `{purchase_response}`. Средства возвращены.",
+                    reply_markup=back_to_services_kb
+                )
+            except TelegramBadRequest:
+                pass
     except Exception as e:
         db.create_transaction(user_id, cost_kopecks, 'refund', f"Возврат из-за ошибки: {e}")
-        await callback_query.message.edit_caption("Произошла непредвиденная ошибка. Средства возвращены.")
+        try:
+            await callback_query.message.edit_caption(
+                "Произошла непредвиденная ошибка. Средства возвращены.",
+                reply_markup=back_to_services_kb
+            )
+        except TelegramBadRequest:
+            pass
 
 
 async def poll_for_sms(message: types.Message, activation_id: int, api: SmsActivateWrapper):

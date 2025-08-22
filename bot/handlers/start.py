@@ -1,6 +1,8 @@
 from aiogram import F, Router, types
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import CommandStart
 from aiogram.filters.command import CommandObject
+from aiogram.types import FSInputFile
 from bot.keyboards.inline import main_menu_keyboard, account_menu_keyboard
 from bot.db import Database
 from config import IMAGE_MAIN_MENU, IMAGE_PROFILE
@@ -31,7 +33,7 @@ async def start_handler(message: types.Message, db: Database, command: CommandOb
     )
     # Use answer_photo for sending a photo with a caption
     await message.answer_photo(
-        photo=IMAGE_MAIN_MENU,
+        photo=FSInputFile(IMAGE_MAIN_MENU),
         caption=welcome_text,
         reply_markup=main_menu_keyboard()
     )
@@ -40,16 +42,22 @@ async def start_handler(message: types.Message, db: Database, command: CommandOb
 async def main_menu_callback_handler(callback_query: types.CallbackQuery):
     """Handles the 'Back to Main Menu' button."""
     await callback_query.answer()
-    await callback_query.message.edit_media(
-        media=types.InputMediaPhoto(media=IMAGE_MAIN_MENU, caption="Главное меню:"),
-        reply_markup=main_menu_keyboard()
-    )
+    try:
+        await callback_query.message.edit_media(
+            media=types.InputMediaPhoto(media=FSInputFile(IMAGE_MAIN_MENU), caption="Главное меню:"),
+            reply_markup=main_menu_keyboard()
+        )
+    except TelegramBadRequest:
+        pass # Ignore "message is not modified" error
 
 @router.callback_query(F.data == "account_menu")
 async def account_menu_callback_handler(callback_query: types.CallbackQuery):
     """Handles the 'My Account' button."""
     await callback_query.answer()
-    await callback_query.message.edit_media(
-        media=types.InputMediaPhoto(media=IMAGE_PROFILE, caption="Личный кабинет:"),
-        reply_markup=account_menu_keyboard()
-    )
+    try:
+        await callback_query.message.edit_media(
+            media=types.InputMediaPhoto(media=FSInputFile(IMAGE_PROFILE), caption="Личный кабинет:"),
+            reply_markup=account_menu_keyboard()
+        )
+    except TelegramBadRequest:
+        pass # Ignore "message is not modified" error

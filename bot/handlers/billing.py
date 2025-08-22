@@ -1,5 +1,6 @@
 import logging
 from aiogram import F, Router, types
+from aiogram.exceptions import TelegramBadRequest
 from bot.keyboards.inline import account_menu_keyboard
 
 router = Router()
@@ -19,4 +20,7 @@ async def top_up_balance_handler(callback_query: types.CallbackQuery):
     )
 
     # In aiogram, we need to answer the callback query before sending a new message or editing.
-    await callback_query.message.edit_text(text, reply_markup=account_menu_keyboard())
+    try:
+        await callback_query.message.edit_text(text, reply_markup=account_menu_keyboard())
+    except TelegramBadRequest:
+        pass # Ignore "message is not modified" error

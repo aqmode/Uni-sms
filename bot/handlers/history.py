@@ -1,5 +1,6 @@
 import logging
 from aiogram import F, Router, types
+from aiogram.exceptions import TelegramBadRequest
 from bot.db import Database
 from bot.keyboards.inline import account_menu_keyboard
 
@@ -39,8 +40,14 @@ async def history_menu_handler(callback_query: types.CallbackQuery, db: Database
             types.InlineKeyboardButton(text="⬅️ Назад в личный кабинет", callback_data="account_menu")
         ]])
 
-        await callback_query.message.edit_text(history_text, reply_markup=keyboard)
+        try:
+            await callback_query.message.edit_text(history_text, reply_markup=keyboard)
+        except TelegramBadRequest:
+            pass # Ignore "message is not modified" error
 
     except Exception as e:
         logging.error(f"Ошибка при получении истории для пользователя {user_id}: {e}")
-        await callback_query.message.edit_text("Не удалось получить вашу историю. Попробуйте снова.")
+        try:
+            await callback_query.message.edit_text("Не удалось получить вашу историю. Попробуйте снова.")
+        except TelegramBadRequest:
+            pass

@@ -1,6 +1,7 @@
 import logging
 from aiogram import F, Router, types
 from aiogram.filters import Filter
+from aiogram.types import FSInputFile
 from bot.states import get_user_state, set_user_state, clear_user_state
 from bot.utils import create_paginated_keyboard
 from bot.handlers.buy_number import COUNTRY_LIST_CACHE, SERVICE_PRICE_CACHE, SERVICE_NAME_MAP
@@ -73,7 +74,7 @@ async def handle_country_search(message: types.Message, query: str):
     keyboard.inline_keyboard.append([types.InlineKeyboardButton(text="⬅️ Назад к странам", callback_data="buy_menu")])
 
     await message.answer_photo(
-        photo=IMAGE_COUNTRIES,
+        photo=FSInputFile(IMAGE_COUNTRIES),
         caption=f"Результаты поиска по запросу '{query}':",
         reply_markup=keyboard
     )
@@ -104,7 +105,7 @@ async def handle_service_search(message: types.Message, query: str, country_id: 
     keyboard.inline_keyboard.append([types.InlineKeyboardButton(text="⬅️ Назад к сервисам", callback_data=f"buy_country:{country_id}")])
 
     await message.answer_photo(
-        photo=IMAGE_SERVICES,
+        photo=FSInputFile(IMAGE_SERVICES),
         caption=f"Результаты поиска по запросу '{query}':",
         reply_markup=keyboard
     )
